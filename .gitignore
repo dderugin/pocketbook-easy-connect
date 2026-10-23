@@ -1,0 +1,21 @@
+# Generated builds, downloaded dependencies and release packages
+/build*/
+/work/
+/dist/
+__pycache__/
+*.py[cod]
+.DS_Store
+
+# Device settings, credentials and runtime diagnostics
+/state/
+/easy-connect.conf
+/.easy-connect.conf.*
+password.hash
+ftp-password.hash
+.password.*
+.password-*
+host_ed25519
+new_host_ed25519
+authorized_keys
+*.log
+/diagnostics.txt

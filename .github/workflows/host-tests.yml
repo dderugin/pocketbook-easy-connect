@@ -1,0 +1,14 @@
+name: Host controller, UI and daemon tests
+on: [push, pull_request]
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y cmake build-essential libssl-dev python3 openssh-client
+      - run: cmake -S . -B build && cmake --build build && ctest --test-dir build --output-on-failure
+      - run: python3 tools/dependencies.py fetch
+      - run: python3 tools/dependencies.py build
+      - run: python3 tests/test_ssh.py build/easy-connect
+      - run: python3 tests/test_ftp.py build/easy-connect
+      - run: python3 tests/test_sessions.py build/ec-ui-test

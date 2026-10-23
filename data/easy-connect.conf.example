@@ -1,0 +1,16 @@
+# Copy to easy-connect.conf beside bin/ on the reader.
+# Password modes: key, password, both (either password OR key).
+auth=key
+# FTP access: password (default) or anonymous (no password).
+ftp_auth=password
+bind_address=0.0.0.0
+ssh_port=2222
+ftp_port=2121
+pasv_min=50000
+pasv_max=50009
+# current = launching account; no root or account switching needed.
+ftp_user=current
+# Without root this is a starting directory, not a filesystem jail.
+ftp_root=/mnt/ext1
+# Optional existing persistent directory; defaults to APP_ROOT/state.
+# state_dir=/mnt/ext1/system/config/easy-connect

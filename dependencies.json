@@ -1,0 +1,12 @@
+{
+  "dropbear": {
+    "version": "2026.94",
+    "url": "https://dropbear.nl/mirror/releases/dropbear-2026.94.tar.bz2",
+    "sha256": "e098034a843699200c8c977a991fff73159735bf795d5f72ef672c41a6b1ae81"
+  },
+  "vsftpd": {
+    "version": "3.0.5",
+    "url": "https://security.appspot.com/downloads/vsftpd-3.0.5.tar.gz",
+    "sha256": "26b602ae454b0ba6d99ef44a09b6b9e0dfa7f67228106736df1f278c70bc91d3"
+  }
+}
