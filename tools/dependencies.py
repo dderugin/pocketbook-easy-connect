@@ -75,6 +75,11 @@ def build(name, sdk, prefix):
         ldflags += f' -L{prefix}/lib'
     env.update(CFLAGS=cflags, CPPFLAGS=cppflags, LDFLAGS=ldflags)
     if name == 'dropbear':
+        # OpenSSL's ARM assembly exports poly1305_init too. Namespace the bundled
+        # LibTomCrypt declaration/definition/callers through its shared header.
+        checked_replace(source / 'libtomcrypt/src/headers/tomcrypt_dropbear.h',
+                        '#define LTC_NOTHING',
+                        '#define LTC_NOTHING\n#define poly1305_init ec_dropbear_poly1305_init')
         checked_replace(source / 'src/svr-authpasswd.c', '#include "runopts.h"',
                         '#include "runopts.h"\n#include "../ec-password.h"')
         checked_replace(source / 'src/svr-authpasswd.c',
@@ -106,7 +111,7 @@ def build(name, sdk, prefix):
             with (source / 'localoptions.h').open('a') as options:
                 options.write('#define DROPBEAR_SVR_DROP_PRIVS 0\n')
         env['LIBS'] = crypto_libraries
-        subprocess.run([str(source / 'configure'), *configure, '--disable-zlib', '--disable-pam',
+        subprocess.run([str(source / 'configure'), *configure, '--enable-bundled-libtom', '--disable-zlib', '--disable-pam',
                         '--disable-lastlog', '--disable-utmp', '--disable-utmpx',
                         '--disable-wtmp', '--disable-wtmpx'], cwd=source, env=env, check=True)
         makefile = source / 'Makefile'

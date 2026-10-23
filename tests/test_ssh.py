@@ -112,6 +112,20 @@ class SSHTests(unittest.TestCase):
             self.assertNotEqual(self.ssh().returncode, 0)
             self.assertNotEqual(self.ssh('password', password='a different password').returncode, 0)
 
+    def test_chacha_and_aes_ciphers_with_key_and_password(self):
+        # Exercise the renamed LibTomCrypt Poly1305 code alongside OpenSSL PBKDF2.
+        with self.server('both'):
+            for cipher in ('chacha20-poly1305@openssh.com', 'aes128-ctr'):
+                for method in ('key', 'password'):
+                    with self.subTest(cipher=cipher, method=method):
+                        args, env = self.ssh_command(method)
+                        args[1:1] = ['-c', cipher]
+                        result = subprocess.run(args, stdin=subprocess.DEVNULL,
+                                                capture_output=True, text=True,
+                                                env=env, timeout=15)
+                        self.assertEqual(result.returncode, 0, result.stderr)
+                        self.assertEqual(result.stdout, 'easy-connect-ok')
+
     def test_either_authentication(self):
         with self.server('both'):
             self.assert_ssh_ok()
