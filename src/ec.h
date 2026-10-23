@@ -4,16 +4,44 @@
 #include <stdio.h>
 #include <sys/types.h>
 #define EC_PATH 4096
+#define EC_DEFAULT_ROOT "/mnt/ext1/system/share/easy-connect"
+
+enum {
+    EC_PORT_MIN = 1024,
+    EC_PORT_MAX = 65535,
+    EC_PASSWORD_MIN_BYTES = 12,
+    EC_PASSWORD_MAX_BYTES = 1024,
+    EC_PASSWORD_SALT_BYTES = 16,
+    EC_PASSWORD_HASH_BYTES = 32,
+    EC_PASSWORD_ITERATIONS = 210000,
+    EC_PRIVATE_FILE_MAX_BYTES = 1024 * 1024
+};
+
 typedef enum { EC_KEYS, EC_PASSWORD, EC_BOTH } ec_auth;
+
 typedef enum { EC_FTP_PASSWORD, EC_FTP_ANONYMOUS } ec_ftp_auth;
+
 typedef struct {
-    char root[EC_PATH], state[EC_PATH], runtime[EC_PATH];
-    char bind_address[64], ftp_root[EC_PATH], ftp_user[64];
-    unsigned ssh_port, ftp_port, pasv_min, pasv_max;
+    char root[EC_PATH];
+    char state[EC_PATH];
+    char runtime[EC_PATH];
+    char bind_address[64];
+    char ftp_root[EC_PATH];
+    char ftp_user[64];
+    unsigned ssh_port;
+    unsigned ftp_port;
+    unsigned pasv_min;
+    unsigned pasv_max;
     ec_auth auth;
     ec_ftp_auth ftp_auth;
 } ec_config;
-typedef struct { pid_t ssh, ftp; int lock_fd; } ec_services;
+
+typedef struct {
+    pid_t ssh;
+    pid_t ftp;
+    int lock_fd;
+} ec_services;
+
 int ec_error(const char *format, ...) __attribute__((format(printf, 1, 2)));
 const char *ec_last_error(void);
 int ec_path(char *out, size_t size, const char *base, const char *name);

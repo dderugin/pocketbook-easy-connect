@@ -20,8 +20,8 @@ def main():
         root=Path(temporary)
         (root/'easy-connect.conf').write_text('auth=both\nstate_dir=/mnt/ext1/system/share/easy-connect/state\n')
         events=root/'events.txt'
-        events.write_text(f'snapshot {output}/ssh.svg\ntap 550 130\nsnapshot {output}/ftp.svg\n'
-                          f'tap 550 460\nsnapshot {output}/ftp-anonymous.svg\n')
+        events.write_text(f'snapshot {output}/ssh.svg\npress ftp-tab\nsnapshot {output}/ftp.svg\n'
+                          f'press ftp-anonymous\nsnapshot {output}/ftp-anonymous.svg\n')
         subprocess.run([str(binary)],env=dict(os.environ,EC_UI_ROOT=str(root),EC_UI_EVENTS=str(events)),check=True,
                        stdout=subprocess.DEVNULL)
     images=[]

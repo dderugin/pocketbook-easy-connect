@@ -71,9 +71,9 @@ class SessionTests(unittest.TestCase):
             self.process.wait(timeout=10)
         self.process.stdout.close()
 
-    def tab(self,tab): self.command(f'tap {550 if tab else 100} 130')
-    def start(self,tab): self.tab(tab); self.command('tap 100 340')
-    def stop(self,tab): self.tab(tab); self.command('tap 550 340')
+    def tab(self,tab): self.command('press ' + tab + '-tab')
+    def start(self,tab): self.tab(tab); self.command('press start')
+    def stop(self,tab): self.tab(tab); self.command('press stop')
 
     def ssh(self):
         user=pwd.getpwuid(os.geteuid()).pw_name
@@ -104,38 +104,38 @@ class SessionTests(unittest.TestCase):
         return path.read_text()
 
     def test_stop_ssh_leaves_ftp_session_and_transfers_running(self):
-        self.start(0); self.start(1); self.ssh()
+        self.start('ssh'); self.start('ftp'); self.ssh()
         with self.ftp() as ftp:
-            self.stop(0)
+            self.stop('ssh')
             self.assert_closed(self.ssh_port)
             ftp.storbinary('STOR after-ssh-stop.txt',io.BytesIO(b'FTP still running'))
             self.assertEqual((self.share/'after-ssh-stop.txt').read_bytes(),b'FTP still running')
-        self.stop(1); self.assert_closed(self.ftp_port)
+        self.stop('ftp'); self.assert_closed(self.ftp_port)
 
     def test_stop_ftp_leaves_ssh_running(self):
-        self.start(0); self.start(1)
-        self.stop(1); self.assert_closed(self.ftp_port); self.ssh()
-        self.stop(0); self.assert_closed(self.ssh_port)
+        self.start('ssh'); self.start('ftp')
+        self.stop('ftp'); self.assert_closed(self.ftp_port); self.ssh()
+        self.stop('ssh'); self.assert_closed(self.ssh_port)
 
     def test_running_settings_locked_and_other_tab_keyboard_keeps_ssh_alive(self):
-        self.start(0)
+        self.start('ssh')
         before=(self.root/'easy-connect.conf').read_bytes()
-        self.command('tap 350 460')
+        self.command('press ssh-password')
         self.assertEqual((self.root/'easy-connect.conf').read_bytes(),before)
-        self.tab(1); self.command('tap 100 540'); self.command('hide')
+        self.tab('ftp'); self.command('press ftp-port'); self.command('hide')
         self.command(f'key {self.new_port}')
         self.assertIn(f'ftp_port={self.new_port}',(self.root/'easy-connect.conf').read_text())
         self.ssh()
 
     def test_anonymous_then_password_setup_from_ui(self):
         (self.root/'state/ftp-password.hash').unlink()
-        self.tab(1); self.command('tap 550 460'); self.start(1)
+        self.tab('ftp'); self.command('press ftp-anonymous'); self.start('ftp')
         with self.ftp('anonymous','unused') as ftp:
             ftp.storbinary('STOR anonymous.txt',io.BytesIO(b'no password required'))
         self.assertEqual((self.share/'anonymous.txt').read_bytes(),b'no password required')
-        self.stop(1); self.command('tap 100 460')
-        self.command('tap 560 715'); self.command('key '+self.password); self.command('key '+self.password)
-        self.start(1)
+        self.stop('ftp'); self.command('press ftp-password')
+        self.command('press ftp-set-password'); self.command('key '+self.password); self.command('key '+self.password)
+        self.start('ftp')
         with self.ftp() as ftp: self.assertIn('anonymous.txt',ftp.nlst())
         with self.assertRaises(ftplib.error_perm):
             with self.ftp('anonymous','unused'): self.fail('Anonymous login accepted in password mode')
@@ -143,57 +143,57 @@ class SessionTests(unittest.TestCase):
     def test_background_and_hide_close_both_daemons_and_allow_restart(self):
         for event in ('hide', 'background'):
             with self.subTest(event=event):
-                self.start(0); self.start(1)
+                self.start('ssh'); self.start('ftp')
                 self.command(event)
                 self.assert_closed(self.ssh_port)
                 self.assert_closed(self.ftp_port)
                 self.command('show')
-                for tab in (0, 1):
+                for tab in ('ssh', 'ftp'):
                     self.tab(tab)
                     self.assertIn('STOPPED', self.ui_text())
                     self.assertIn('left the foreground', self.ui_text())
-                self.start(0); self.ssh(); self.stop(0)
+                self.start('ssh'); self.ssh(); self.stop('ssh')
 
     def test_exit_button_closes_both_daemons(self):
-        self.start(0); self.start(1)
-        self.command('tap 550 920')
+        self.start('ssh'); self.start('ftp')
+        self.command('press exit')
         self.assertEqual(self.process.wait(timeout=10), 0)
         self.assert_closed(self.ssh_port)
         self.assert_closed(self.ftp_port)
 
     def test_disabled_start_stop_buttons_are_idempotent(self):
-        self.stop(0); self.stop(1)
-        self.start(0); self.start(1)
+        self.stop('ssh'); self.stop('ftp')
+        self.start('ssh'); self.start('ftp')
         before = (self.root / 'easy-connect.conf').read_bytes()
-        self.start(0); self.start(1)
+        self.start('ssh'); self.start('ftp')
         self.ssh()
         with self.ftp() as ftp:
             self.assertEqual(Path(ftp.pwd()).resolve(), self.share.resolve())
         self.assertEqual((self.root / 'easy-connect.conf').read_bytes(), before)
 
     def test_failed_ssh_start_keeps_ftp_running_and_can_recover(self):
-        self.start(1)
+        self.start('ftp')
         daemon = self.root / 'bin/dropbear'
         saved = self.root / 'bin/dropbear-saved'
         daemon.rename(saved)
         try:
-            self.start(0)
+            self.start('ssh')
             self.assertIn('STOPPED', self.ui_text())
             self.assertIn('missing executable', self.ui_text())
             with self.ftp() as ftp:
                 ftp.storbinary('STOR survives-failed-ssh', io.BytesIO(b'FTP stays alive'))
         finally:
             saved.rename(daemon)
-        self.start(0); self.ssh()
+        self.start('ssh'); self.ssh()
         self.assertIn('RUNNING', self.ui_text())
 
     def test_ftp_running_settings_and_password_are_locked(self):
-        self.start(1)
+        self.start('ftp')
         before = (self.root / 'easy-connect.conf').read_bytes()
         password = (self.root / 'state/ftp-password.hash').read_bytes()
-        for tap in ('tap 550 460', 'tap 100 540', 'tap 350 540',
-                    'tap 550 540', 'tap 100 620', 'tap 560 715'):
-            self.command(tap)
+        for event in ('press ftp-anonymous', 'press ftp-port', 'press ftp-passive-min',
+                    'press ftp-passive-max', 'press ftp-root', 'press ftp-set-password'):
+            self.command(event)
             self.assertIn('Stop this daemon', self.ui_text())
         self.assertEqual((self.root / 'easy-connect.conf').read_bytes(), before)
         self.assertEqual((self.root / 'state/ftp-password.hash').read_bytes(), password)
@@ -218,15 +218,15 @@ class SessionTests(unittest.TestCase):
 
     @unittest.skipUnless(sys.platform.startswith('linux'), 'process ancestry requires Linux /proc')
     def test_crashed_ssh_listener_updates_status_and_leaves_ftp_running(self):
-        self.start(0)
+        self.start('ssh')
         children = Path(f'/proc/{self.process.pid}/task/{self.process.pid}/children')
         supervisor = children.read_text().split()
         self.assertEqual(len(supervisor), 1)
         descendants = Path(f'/proc/{supervisor[0]}/task/{supervisor[0]}/children').read_text().split()
         self.assertEqual(len(descendants), 1)
-        self.start(1)
+        self.start('ftp')
         os.kill(int(descendants[0]), signal.SIGKILL)
-        self.tab(0)
+        self.tab('ssh')
         deadline = time.monotonic() + 5
         while time.monotonic() < deadline:
             self.command('tick')
@@ -235,11 +235,11 @@ class SessionTests(unittest.TestCase):
         self.assertIn('STOPPED', self.ui_text())
         with self.ftp() as ftp:
             ftp.storbinary('STOR after-ssh-crash', io.BytesIO(b'FTP stays alive'))
-        self.start(0); self.ssh()
+        self.start('ssh'); self.ssh()
 
     @unittest.skipUnless(sys.platform.startswith('linux'), 'parent death cleanup requires Linux')
     def test_killed_ui_does_not_leave_daemon_listeners_running(self):
-        self.start(0); self.start(1)
+        self.start('ssh'); self.start('ftp')
         self.process.kill()
         self.process.wait(timeout=5)
         deadline = time.monotonic() + 8
@@ -253,7 +253,7 @@ class SessionTests(unittest.TestCase):
 
     @unittest.skipUnless(sys.platform.startswith('linux'),'session descendant cleanup requires Linux')
     def test_stop_ssh_closes_active_session_and_keeps_ftp_running(self):
-        self.start(0); self.start(1)
+        self.start('ssh'); self.start('ftp')
         user=pwd.getpwuid(os.geteuid()).pw_name
         client=subprocess.Popen(['ssh','-F','/dev/null','-p',str(self.ssh_port),'-i',str(self.key),
             '-o','IdentityAgent=none','-o','IdentitiesOnly=yes','-o','BatchMode=yes',
@@ -264,7 +264,7 @@ class SessionTests(unittest.TestCase):
             ready,_,_=select.select([client.stdout],[],[],10)
             self.assertTrue(ready)
             self.assertEqual(client.stdout.readline(),'ready\n')
-            self.stop(0)
+            self.stop('ssh')
             self.assertNotEqual(client.wait(timeout=10),0)
             with self.ftp() as ftp: self.assertEqual(Path(ftp.pwd()).resolve(),self.share.resolve())
         finally:

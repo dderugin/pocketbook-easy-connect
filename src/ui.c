@@ -1,298 +1,498 @@
-/* Two-tab InkView interface. All coordinates use a 720 x 960 logical canvas. */
-#include "ec.h"
-#include <inkview.h>
-#include <openssl/crypto.h>
+/* InkView event handling, settings edits, and daemon lifecycle. */
+#include "ui.h"
 #include <arpa/inet.h>
 #include <errno.h>
 #include <ifaddrs.h>
 #include <net/if.h>
+#include <openssl/crypto.h>
 #include <pwd.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
-static ec_config config;
-static ec_services services;
-static ifont *body_font,*small_font,*title_font;
-static int opened=0,tab=0,editing=0,password_tab=0;
-static char notices[2][256]={{0},{0}};
-static char fingerprint[128]="Created when SSH starts.";
-static char last_address[64]={0};
-static char keyboard[EC_PATH],pending_password[1025];
-enum { EDIT_NONE,EDIT_SSH_PORT,EDIT_FTP_PORT,EDIT_PASV_MIN,EDIT_PASV_MAX,
-       EDIT_FTP_ROOT,EDIT_PASSWORD,EDIT_PASSWORD_CONFIRM };
-static void draw(void);
-static void keyboard_result(char *text);
-static int px(int x) { return x*ScreenWidth()/720; }
-static int py(int y) { return y*ScreenHeight()/960; }
-static const char *service_name(void) { return tab?"ftp":"ssh"; }
-static int running(void) { return tab?services.ftp!=0:services.ssh!=0; }
-static void note(const char *message) { snprintf(notices[tab],sizeof notices[tab],"%s",message); }
-static void text(int x,int y,int w,int h,const char *value,ifont *font,int color) {
-    SetFont(font,color);
-    DrawTextRect(px(x),py(y),px(w),py(h),value,ALIGN_LEFT);
+static ui_app app = {.active_tab = UI_TAB_SSH, .fingerprint = "Created when SSH starts."};
+
+static void keyboard_result(char *value);
+static void refresh_status(void);
+
+static void set_notice(ui_tab tab, const char *message) {
+    snprintf(app.notices[tab], sizeof app.notices[tab], "%s", message);
 }
-static void button(int x,int y,int w,int h,const char *label,int selected,int enabled) {
-    if (selected) FillArea(px(x),py(y),px(w),py(h),BLACK);
-    else DrawRect(px(x),py(y),px(w),py(h),enabled?BLACK:LGRAY);
-    text(x+12,y+12,w-24,h-16,label,body_font,selected?WHITE:enabled?BLACK:DGRAY);
+
+static void notify(const char *message) {
+    set_notice(app.active_tab, message);
 }
-static void address(char *out,size_t size) {
-    struct ifaddrs *interfaces=NULL;
-    snprintf(out,size,"not connected");
-    if (getifaddrs(&interfaces)) return;
-    for (struct ifaddrs *i=interfaces;i;i=i->ifa_next) {
-        if (!i->ifa_addr || i->ifa_addr->sa_family!=AF_INET ||
-            !(i->ifa_flags&IFF_UP) || (i->ifa_flags&IFF_LOOPBACK)) continue;
-        struct sockaddr_in *a=(struct sockaddr_in *)i->ifa_addr;
-        if (inet_ntop(AF_INET,&a->sin_addr,out,(socklen_t)size)) break;
+
+static void read_device_address(char *out, size_t size) {
+    struct ifaddrs *interfaces = NULL;
+    snprintf(out, size, "not connected");
+    if (getifaddrs(&interfaces)) {
+        return;
+    }
+    for (struct ifaddrs *interface = interfaces; interface; interface = interface->ifa_next) {
+        if (!interface->ifa_addr || interface->ifa_addr->sa_family != AF_INET ||
+            !(interface->ifa_flags & IFF_UP) || (interface->ifa_flags & IFF_LOOPBACK)) {
+            continue;
+        }
+        const struct sockaddr_in *address = (const struct sockaddr_in *)interface->ifa_addr;
+        if (inet_ntop(AF_INET, &address->sin_addr, out, (socklen_t)size)) {
+            break;
+        }
     }
     freeifaddrs(interfaces);
 }
-static void update_fingerprint(void) {
-    char info[1024],path[EC_PATH];
-    if (ec_path(path,sizeof path,config.state,"host_ed25519") || access(path,R_OK)) return;
-    if (!ec_key_info(&config,info,sizeof info)) {
-        char *hash=strstr(info,"SHA256:");
-        if (hash) { hash[strcspn(hash,"\r\n")]=0; snprintf(fingerprint,sizeof fingerprint,"%.127s",hash); }
-    }
-}
-static void draw(void) {
-    if (editing || !body_font) return;
-    ClearScreen();
-    text(24,20,672,45,"Easy Connect",title_font,BLACK);
-    char line[EC_PATH+128],ip[64];
-    address(ip,sizeof ip);
-    snprintf(last_address,sizeof last_address,"%s",ip);
-    snprintf(line,sizeof line,"Device address: %s",ip);
-    text(24,68,672,32,line,small_font,BLACK);
-    button(24,110,336,62,"SSH",tab==0,1);
-    button(360,110,336,62,"FTP",tab==1,1);
-    text(24,198,360,40,tab?"FTP daemon":"SSH daemon",title_font,BLACK);
-    text(472,204,224,34,running()?"RUNNING":"STOPPED",body_font,BLACK);
-    struct passwd *pw=getpwuid(geteuid());
-    const char *user=tab?(config.ftp_auth==EC_FTP_ANONYMOUS?"anonymous":config.ftp_user):pw?pw->pw_name:"unknown";
-    if (tab) snprintf(line,sizeof line,"ftp://%s@%s:%u/",user,ip,config.ftp_port);
-    else snprintf(line,sizeof line,"ssh -p %u %s@%s",config.ssh_port,user,ip);
-    text(24,248,672,48,line,body_font,BLACK);
-    button(24,312,324,62,"Start",0,!running());
-    button(372,312,324,62,"Stop",0,running());
-    text(24,400,672,32,"Access type",body_font,BLACK);
-    if (!tab) {
-        button(24,440,216,52,"Public key",config.auth==EC_KEYS,!running());
-        button(252,440,216,52,"Password",config.auth==EC_PASSWORD,!running());
-        button(480,440,216,52,"Key or password",config.auth==EC_BOTH,!running());
-        snprintf(line,sizeof line,"SSH port: %u    Edit",config.ssh_port);
-        button(24,514,672,54,line,0,!running());
-        if (config.auth!=EC_KEYS) {
-            text(24,598,430,36,ec_has_password(&config,"ssh")?"Password: configured":"Password: not set",body_font,BLACK);
-            button(480,584,216,54,"Set password",0,!running());
-        } else text(24,586,672,52,"Connect with your private SSH key.",body_font,BLACK);
-        if (config.auth!=EC_PASSWORD) {
-            snprintf(line,sizeof line,"Public keys: %u entries",ec_key_count(&config));
-            text(24,656,672,32,line,body_font,BLACK);
-            snprintf(line,sizeof line,"Copy .pub keys to:\n%s/authorized_keys",config.state);
-            text(24,698,672,72,line,small_font,BLACK);
-        } else text(24,656,672,88,"Use the device account shown above and your Easy Connect SSH password.",body_font,BLACK);
-        snprintf(line,sizeof line,"Device fingerprint\n%s",fingerprint);
-        text(24,770,672,64,line,small_font,BLACK);
-    } else {
-        button(24,440,324,52,"Password",config.ftp_auth==EC_FTP_PASSWORD,!running());
-        button(372,440,324,52,"No password",config.ftp_auth==EC_FTP_ANONYMOUS,!running());
-        snprintf(line,sizeof line,"Port: %u",config.ftp_port);
-        button(24,514,216,54,line,0,!running());
-        snprintf(line,sizeof line,"Passive: %u",config.pasv_min);
-        button(252,514,216,54,line,0,!running());
-        snprintf(line,sizeof line,"to %u",config.pasv_max);
-        button(480,514,216,54,line,0,!running());
-        snprintf(line,sizeof line,"Starting folder: %s",config.ftp_root);
-        button(24,590,672,70,line,0,!running());
-        if (config.ftp_auth==EC_FTP_PASSWORD) {
-            text(24,702,430,36,ec_has_password(&config,"ftp")?"Password: configured":"Password: not set",body_font,BLACK);
-            button(480,688,216,54,"Set password",0,!running());
-            text(24,764,672,58,"Login uses the account shown above. FTP transfers are unencrypted.",small_font,BLACK);
-        } else text(24,690,672,70,"Login as anonymous; no password needed. Anyone on your network can access these files.",body_font,BLACK);
-        if (geteuid()!=0) text(24,828,672,32,"Access follows this user's file permissions; no folder jail.",small_font,BLACK);
-    }
-    text(24,850,672,40,*notices[tab]?notices[tab]:"Stop this daemon before changing its settings.",small_font,BLACK);
-    button(24,900,450,48,"Save diagnostics",0,1);
-    button(498,900,198,48,"Exit",0,1);
-    FullUpdate();
-}
-static int save_candidate(ec_config *candidate) {
-    if (ec_config_save(candidate)) { note(ec_last_error()); return -1; }
-    config=*candidate;
-    note("Settings saved.");
-    return 0;
-}
-static void edit(int field) {
-    if (running()) { note("Stop this daemon before changing its settings."); draw(); return; }
-    editing=field;
-    const char *title="";
-    int flags=KBD_NUMERIC;
-    switch (field) {
-    case EDIT_SSH_PORT: title="SSH port"; snprintf(keyboard,sizeof keyboard,"%u",config.ssh_port); break;
-    case EDIT_FTP_PORT: title="FTP port"; snprintf(keyboard,sizeof keyboard,"%u",config.ftp_port); break;
-    case EDIT_PASV_MIN: title="First passive port"; snprintf(keyboard,sizeof keyboard,"%u",config.pasv_min); break;
-    case EDIT_PASV_MAX: title="Last passive port"; snprintf(keyboard,sizeof keyboard,"%u",config.pasv_max); break;
-    case EDIT_FTP_ROOT: title="FTP starting folder"; snprintf(keyboard,sizeof keyboard,"%s",config.ftp_root); flags=0; break;
-    case EDIT_PASSWORD: title="New password (12+ characters)"; *keyboard=0; flags=KBD_PASSWORD; password_tab=tab; break;
-    case EDIT_PASSWORD_CONFIRM: title="Confirm new password"; *keyboard=0; flags=KBD_PASSWORD; break;
-    }
-    OpenKeyboard(title,keyboard,(field==EDIT_PASSWORD || field==EDIT_PASSWORD_CONFIRM)?1025:(int)sizeof keyboard,flags,keyboard_result);
-}
-static void keyboard_result(char *value) {
-    int field=editing;
-    editing=0;
-    if (!value) {
-        OPENSSL_cleanse(keyboard,sizeof keyboard); OPENSSL_cleanse(pending_password,sizeof pending_password);
-        note("Edit cancelled."); draw(); return;
-    }
-    if (field==EDIT_PASSWORD) {
-        size_t length=strlen(value);
-        size_t characters=0;
-        for (const unsigned char *p=(const unsigned char *)value; *p; ++p)
-            if ((*p&0xc0)!=0x80) ++characters;
-        if (characters<12 || length>1024 || strpbrk(value,"\r\n")) {
-            note("Use at least 12 characters, without line breaks.");
-            OPENSSL_cleanse(keyboard,sizeof keyboard); draw(); return;
-        }
-        memcpy(pending_password,value,length+1);
-        OPENSSL_cleanse(keyboard,sizeof keyboard);
-        edit(EDIT_PASSWORD_CONFIRM);
+
+static void redraw(void) {
+    if (app.editor.field != UI_EDIT_NONE) {
         return;
     }
-    if (field==EDIT_PASSWORD_CONFIRM) {
-        if (strcmp(value,pending_password)) note("Passwords did not match; password unchanged.");
-        else if (ec_set_password(&config,password_tab?"ftp":"ssh",pending_password)) note(ec_last_error());
-        else note("Password saved.");
-        OPENSSL_cleanse(keyboard,sizeof keyboard); OPENSSL_cleanse(pending_password,sizeof pending_password);
-        draw(); return;
+    read_device_address(app.device_address, sizeof app.device_address);
+    ui_draw(&app);
+}
+
+static void update_fingerprint(void) {
+    char info[1024];
+    char path[EC_PATH];
+    if (ec_path(path, sizeof path, app.config.state, "host_ed25519") || access(path, R_OK)) {
+        return;
     }
-    ec_config candidate=config;
-    if (field==EDIT_FTP_ROOT) {
-        if (strlen(value)>=sizeof candidate.ftp_root) { note("Folder path is too long."); draw(); return; }
-        strcpy(candidate.ftp_root,value);
+    if (ec_key_info(&app.config, info, sizeof info)) {
+        return;
+    }
+    char *hash = strstr(info, "SHA256:");
+    if (hash) {
+        hash[strcspn(hash, "\r\n")] = '\0';
+        snprintf(app.fingerprint, sizeof app.fingerprint, "%.*s", (int)sizeof app.fingerprint - 1,
+                 hash);
+    }
+}
+
+static bool selected_service_is_editable(void) {
+    if (ui_is_running(&app, app.active_tab)) {
+        notify("Stop this daemon before changing its settings.");
+        return false;
+    }
+    return true;
+}
+
+static void save_settings(const ec_config *candidate) {
+    if (ec_config_save(candidate)) {
+        notify(ec_last_error());
+        return;
+    }
+    app.config = *candidate;
+    notify("Settings saved.");
+}
+
+static void select_access_type(ui_control_id control) {
+    if (!selected_service_is_editable()) {
+        return;
+    }
+    ec_config candidate = app.config;
+    switch (control) {
+    case UI_SSH_KEYS:
+        candidate.auth = EC_KEYS;
+        break;
+    case UI_SSH_PASSWORD:
+        candidate.auth = EC_PASSWORD;
+        break;
+    case UI_SSH_BOTH:
+        candidate.auth = EC_BOTH;
+        break;
+    case UI_FTP_PASSWORD:
+        candidate.ftp_auth = EC_FTP_PASSWORD;
+        break;
+    case UI_FTP_ANONYMOUS:
+        candidate.ftp_auth = EC_FTP_ANONYMOUS;
+        break;
+    default:
+        return;
+    }
+    save_settings(&candidate);
+}
+
+static void clear_password_buffers(void) {
+    OPENSSL_cleanse(app.editor.buffer, sizeof app.editor.buffer);
+    OPENSSL_cleanse(app.editor.pending_password, sizeof app.editor.pending_password);
+}
+
+static void begin_edit(ui_edit_field field) {
+    if (!selected_service_is_editable()) {
+        return;
+    }
+    const char *title;
+    int flags = KBD_NUMERIC;
+    size_t capacity = sizeof app.editor.buffer;
+    char *buffer = app.editor.buffer;
+
+    switch (field) {
+    case UI_EDIT_SSH_PORT:
+        title = "SSH port";
+        snprintf(buffer, capacity, "%u", app.config.ssh_port);
+        break;
+    case UI_EDIT_FTP_PORT:
+        title = "FTP port";
+        snprintf(buffer, capacity, "%u", app.config.ftp_port);
+        break;
+    case UI_EDIT_PASSIVE_MIN:
+        title = "First passive port";
+        snprintf(buffer, capacity, "%u", app.config.pasv_min);
+        break;
+    case UI_EDIT_PASSIVE_MAX:
+        title = "Last passive port";
+        snprintf(buffer, capacity, "%u", app.config.pasv_max);
+        break;
+    case UI_EDIT_FTP_ROOT:
+        title = "FTP starting folder";
+        snprintf(buffer, capacity, "%s", app.config.ftp_root);
+        flags = 0;
+        break;
+    case UI_EDIT_PASSWORD:
+        title = "New password (12+ characters)";
+        app.editor.password_tab = app.active_tab;
+        buffer[0] = '\0';
+        flags = KBD_PASSWORD;
+        capacity = sizeof app.editor.pending_password;
+        break;
+    case UI_EDIT_PASSWORD_CONFIRM:
+        title = "Confirm new password";
+        buffer[0] = '\0';
+        flags = KBD_PASSWORD;
+        capacity = sizeof app.editor.pending_password;
+        break;
+    default:
+        return;
+    }
+    app.editor.field = field;
+    OpenKeyboard(title, buffer, (int)capacity, flags, keyboard_result);
+}
+
+static bool password_input_is_valid(const char *value) {
+    size_t characters = 0;
+    for (const unsigned char *byte = (const unsigned char *)value; *byte; ++byte) {
+        /* UTF-8 continuation bytes do not begin a character. */
+        if ((*byte & 0xc0) != 0x80) {
+            ++characters;
+        }
+    }
+    return characters >= UI_PASSWORD_MIN_CHARACTERS && strlen(value) <= EC_PASSWORD_MAX_BYTES &&
+           !strpbrk(value, "\r\n");
+}
+
+static void accept_new_password(const char *value) {
+    if (!password_input_is_valid(value)) {
+        notify("Use at least 12 characters, without line breaks.");
+        clear_password_buffers();
+        return;
+    }
+    memcpy(app.editor.pending_password, value, strlen(value) + 1);
+    OPENSSL_cleanse(app.editor.buffer, sizeof app.editor.buffer);
+    begin_edit(UI_EDIT_PASSWORD_CONFIRM);
+}
+
+static void confirm_new_password(const char *value) {
+    if (strcmp(value, app.editor.pending_password)) {
+        notify("Passwords did not match; password unchanged.");
     } else {
-        char *end;
-        errno=0;
-        unsigned long port=strtoul(value,&end,10);
-        if (!*value || strspn(value,"0123456789")!=strlen(value) || *end || errno || port<1024 || port>65535) {
-            note("Port must be a number between 1024 and 65535."); draw(); return;
+        const char *service = ui_service_name(app.editor.password_tab);
+        if (ec_set_password(&app.config, service, app.editor.pending_password)) {
+            notify(ec_last_error());
+        } else {
+            notify("Password saved.");
+        }
+    }
+    clear_password_buffers();
+}
+
+static bool parse_edited_port(const char *value, unsigned *port) {
+    char *end;
+    errno = 0;
+    unsigned long number = strtoul(value, &end, 10);
+    if (!*value || strspn(value, "0123456789") != strlen(value) || *end || errno ||
+        number < EC_PORT_MIN || number > EC_PORT_MAX) {
+        notify("Port must be a number between 1024 and 65535.");
+        return false;
+    }
+    *port = (unsigned)number;
+    return true;
+}
+
+static void apply_setting_edit(ui_edit_field field, const char *value) {
+    ec_config candidate = app.config;
+    if (field == UI_EDIT_FTP_ROOT) {
+        if (strlen(value) >= sizeof candidate.ftp_root) {
+            notify("Folder path is too long.");
+            return;
+        }
+        strcpy(candidate.ftp_root, value);
+    } else {
+        unsigned port;
+        if (!parse_edited_port(value, &port)) {
+            return;
         }
         switch (field) {
-        case EDIT_SSH_PORT: candidate.ssh_port=(unsigned)port; break;
-        case EDIT_FTP_PORT: candidate.ftp_port=(unsigned)port; break;
-        case EDIT_PASV_MIN: candidate.pasv_min=(unsigned)port; break;
-        case EDIT_PASV_MAX: candidate.pasv_max=(unsigned)port; break;
+        case UI_EDIT_SSH_PORT:
+            candidate.ssh_port = port;
+            break;
+        case UI_EDIT_FTP_PORT:
+            candidate.ftp_port = port;
+            break;
+        case UI_EDIT_PASSIVE_MIN:
+            candidate.pasv_min = port;
+            break;
+        case UI_EDIT_PASSIVE_MAX:
+            candidate.pasv_max = port;
+            break;
+        default:
+            return;
         }
     }
-    save_candidate(&candidate);
-    OPENSSL_cleanse(keyboard,sizeof keyboard);
-    draw();
+    save_settings(&candidate);
+    OPENSSL_cleanse(app.editor.buffer, sizeof app.editor.buffer);
 }
-static void tap(int x,int y) {
-    if (editing) return;
-    ec_poll(&services);
-    if (y>=110 && y<172 && x>=24 && x<696) { tab=x<360?0:1; draw(); return; }
-    if (x<24 || x>=696) return;
-    if (y>=312 && y<374) {
-        if (x<348 && !running()) {
-            if (ec_start(&config,&services,service_name())) note(ec_last_error());
-            else { note("Daemon started."); if (!tab) update_fingerprint(); }
-        } else if (x>=372 && running()) {
-            if (ec_stop(&config,&services,service_name())) note(ec_last_error()); else note("Daemon stopped.");
-        }
-    } else if (y>=440 && y<492) {
-        if (running()) note("Stop this daemon before changing its settings.");
-        else {
-            ec_config candidate=config;
-            if (!tab) {
-                if (x<240) candidate.auth=EC_KEYS;
-                else if (x>=252 && x<468) candidate.auth=EC_PASSWORD;
-                else if (x>=480) candidate.auth=EC_BOTH;
-                else return;
-            } else {
-                if (x<348) candidate.ftp_auth=EC_FTP_PASSWORD;
-                else if (x>=372) candidate.ftp_auth=EC_FTP_ANONYMOUS;
-                else return;
-            }
-            save_candidate(&candidate);
-        }
-    } else if (y>=514 && y<568) {
-        if (!tab) edit(EDIT_SSH_PORT);
-        else if (x<240) edit(EDIT_FTP_PORT);
-        else if (x>=252 && x<468) edit(EDIT_PASV_MIN);
-        else if (x>=480) edit(EDIT_PASV_MAX);
-    } else if (!tab && config.auth!=EC_KEYS && y>=584 && y<638 && x>=480) edit(EDIT_PASSWORD);
-    else if (tab && y>=590 && y<660) edit(EDIT_FTP_ROOT);
-    else if (tab && config.ftp_auth==EC_FTP_PASSWORD && y>=688 && y<742 && x>=480) edit(EDIT_PASSWORD);
-    else if (y>=900 && y<948) {
-        if (x>=498) { CloseApp(); return; }
-        if (x<474) {
-            char path[EC_PATH];
-            if (!ec_path(path,sizeof path,config.root,"diagnostics.txt")) {
-                FILE *out=fopen(path,"w");
-                if (out) { ec_doctor(&config,out); fclose(out); note("Saved diagnostics.txt in the app folder."); }
-                else note("Could not save diagnostics.");
-            }
+
+static void keyboard_result(char *value) {
+    ui_edit_field field = app.editor.field;
+    app.editor.field = UI_EDIT_NONE;
+    if (!value) {
+        clear_password_buffers();
+        notify("Edit cancelled.");
+    } else {
+        switch (field) {
+        case UI_EDIT_PASSWORD:
+            accept_new_password(value);
+            break;
+        case UI_EDIT_PASSWORD_CONFIRM:
+            confirm_new_password(value);
+            break;
+        case UI_EDIT_NONE:
+            break;
+        default:
+            apply_setting_edit(field, value);
+            break;
         }
     }
-    draw();
+    redraw();
 }
-static void refresh(void) {
-    pid_t ssh=services.ssh,ftp=services.ftp;
-    ec_poll(&services);
-    if (ssh && !services.ssh) snprintf(notices[0],sizeof notices[0],"SSH exited. Check its log for details.");
-    if (ftp && !services.ftp) snprintf(notices[1],sizeof notices[1],"FTP exited. Check its log for details.");
-    char ip[64];
-    address(ip,sizeof ip);
-    if (ssh!=services.ssh || ftp!=services.ftp || strcmp(ip,last_address)) draw();
-    SetHardTimer("easy-connect-status",refresh,1000);
+
+static void start_selected_service(void) {
+    if (ui_is_running(&app, app.active_tab)) {
+        return;
+    }
+    if (ec_start(&app.config, &app.services, ui_service_name(app.active_tab))) {
+        notify(ec_last_error());
+        return;
+    }
+    notify("Daemon started.");
+    if (app.active_tab == UI_TAB_SSH) {
+        update_fingerprint();
+    }
 }
-static void background(void) {
-    ClearTimer(refresh);
-    ec_stop_all(&config,&services);
-    snprintf(notices[0],sizeof notices[0],"Connections stopped when the app left the foreground.");
-    snprintf(notices[1],sizeof notices[1],"Connections stopped when the app left the foreground.");
+
+static void stop_selected_service(void) {
+    if (!ui_is_running(&app, app.active_tab)) {
+        return;
+    }
+    if (ec_stop(&app.config, &app.services, ui_service_name(app.active_tab))) {
+        notify(ec_last_error());
+    } else {
+        notify("Daemon stopped.");
+    }
 }
-static int handler(int type,int p1,int p2) {
+
+static void save_diagnostics(void) {
+    char path[EC_PATH];
+    if (ec_path(path, sizeof path, app.config.root, "diagnostics.txt")) {
+        return;
+    }
+    FILE *out = fopen(path, "w");
+    if (!out) {
+        notify("Could not save diagnostics.");
+        return;
+    }
+    ec_doctor(&app.config, out);
+    fclose(out);
+    notify("Saved diagnostics.txt in the app folder.");
+}
+
+static void activate_control(ui_control_id control) {
+    switch (control) {
+    case UI_SSH_TAB:
+        app.active_tab = UI_TAB_SSH;
+        break;
+    case UI_FTP_TAB:
+        app.active_tab = UI_TAB_FTP;
+        break;
+    case UI_START:
+        start_selected_service();
+        break;
+    case UI_STOP:
+        stop_selected_service();
+        break;
+    case UI_SSH_KEYS:
+    case UI_SSH_PASSWORD:
+    case UI_SSH_BOTH:
+    case UI_FTP_PASSWORD:
+    case UI_FTP_ANONYMOUS:
+        select_access_type(control);
+        break;
+    case UI_SSH_PORT:
+        begin_edit(UI_EDIT_SSH_PORT);
+        break;
+    case UI_FTP_PORT:
+        begin_edit(UI_EDIT_FTP_PORT);
+        break;
+    case UI_FTP_PASSIVE_MIN:
+        begin_edit(UI_EDIT_PASSIVE_MIN);
+        break;
+    case UI_FTP_PASSIVE_MAX:
+        begin_edit(UI_EDIT_PASSIVE_MAX);
+        break;
+    case UI_FTP_ROOT:
+        begin_edit(UI_EDIT_FTP_ROOT);
+        break;
+    case UI_SSH_SET_PASSWORD:
+    case UI_FTP_SET_PASSWORD:
+        begin_edit(UI_EDIT_PASSWORD);
+        break;
+    case UI_SAVE_DIAGNOSTICS:
+        save_diagnostics();
+        break;
+    case UI_EXIT:
+        CloseApp();
+        break;
+    case UI_CONTROL_NONE:
+    case UI_CONTROL_COUNT:
+        break;
+    }
+}
+
+static void handle_pointer_up(int screen_x, int screen_y) {
+    if (app.editor.field != UI_EDIT_NONE) {
+        return;
+    }
+    ec_poll(&app.services);
+    int logical_x = screen_x * UI_CANVAS_WIDTH / ScreenWidth();
+    int logical_y = screen_y * UI_CANVAS_HEIGHT / ScreenHeight();
+    ui_control_id control = ui_hit_test(app.active_tab, &app.config, logical_x, logical_y);
+    activate_control(control);
+    if (control != UI_EXIT) {
+        redraw();
+    }
+}
+
+static void refresh_status(void) {
+    pid_t previous_ssh = app.services.ssh;
+    pid_t previous_ftp = app.services.ftp;
+    ec_poll(&app.services);
+    if (previous_ssh && !app.services.ssh) {
+        set_notice(UI_TAB_SSH, "SSH exited. Check its log for details.");
+    }
+    if (previous_ftp && !app.services.ftp) {
+        set_notice(UI_TAB_FTP, "FTP exited. Check its log for details.");
+    }
+    char address[sizeof app.device_address];
+    read_device_address(address, sizeof address);
+    if (previous_ssh != app.services.ssh || previous_ftp != app.services.ftp ||
+        strcmp(address, app.device_address)) {
+        redraw();
+    }
+    SetHardTimer("easy-connect-status", refresh_status, UI_STATUS_REFRESH_MS);
+}
+
+static void enter_background(void) {
+    ClearTimer(refresh_status);
+    ec_stop_all(&app.config, &app.services);
+    for (ui_tab tab = UI_TAB_SSH; tab < UI_TAB_COUNT; ++tab) {
+        set_notice(tab, "Connections stopped when the app left the foreground.");
+    }
+}
+
+static bool open_fonts(void) {
+    int width_size = UI_BODY_FONT_SIZE * ScreenWidth() / UI_CANVAS_WIDTH;
+    int height_size = UI_BODY_FONT_SIZE * ScreenHeight() / UI_CANVAS_HEIGHT;
+    int size = width_size < height_size ? width_size : height_size;
+    app.fonts.body = OpenFont(DEFAULTFONT, size, 0);
+    app.fonts.small = OpenFont(DEFAULTFONT, size * UI_SMALL_FONT_PERCENT / 100, 0);
+    app.fonts.title = OpenFont(DEFAULTFONT, size * UI_TITLE_FONT_PERCENT / 100, 1);
+    if (!app.fonts.body || !app.fonts.small || !app.fonts.title) {
+        CloseApp();
+        return false;
+    }
+    return true;
+}
+
+static void close_font(ifont **font) {
+    if (*font) {
+        CloseFont(*font);
+        *font = NULL;
+    }
+}
+
+static void close_application(void) {
+    ClearTimer(refresh_status);
+    if (app.services_open) {
+        ec_services_close(&app.config, &app.services);
+        app.services_open = false;
+    }
+    close_font(&app.fonts.body);
+    close_font(&app.fonts.small);
+    close_font(&app.fonts.title);
+    clear_password_buffers();
+}
+
+static int handle_event(int type, int parameter1, int parameter2) {
     switch (type) {
-    case EVT_INIT: {
-        int size=20*ScreenWidth()/720;
-        if (size>20*ScreenHeight()/960) size=20*ScreenHeight()/960;
-        body_font=OpenFont(DEFAULTFONT,size,0);
-        small_font=OpenFont(DEFAULTFONT,size*4/5,0);
-        title_font=OpenFont(DEFAULTFONT,size*3/2,1);
-        if (!body_font || !small_font || !title_font) { CloseApp(); return 0; }
-        update_fingerprint(); break;
-    }
-    case EVT_SHOW: draw(); SetHardTimer("easy-connect-status",refresh,1000); break;
-    case EVT_POINTERUP: tap(p1*720/ScreenWidth(),p2*960/ScreenHeight()); break;
-    case EVT_KEYPRESS: if (p1==KEY_BACK) CloseApp(); break;
-    case EVT_HIDE: if (!editing) background(); break;
-    case EVT_BACKGROUND: background(); break;
+    case EVT_INIT:
+        if (open_fonts()) {
+            update_fingerprint();
+        }
+        break;
+    case EVT_SHOW:
+        redraw();
+        SetHardTimer("easy-connect-status", refresh_status, UI_STATUS_REFRESH_MS);
+        break;
+    case EVT_POINTERUP:
+        handle_pointer_up(parameter1, parameter2);
+        break;
+    case EVT_KEYPRESS:
+        if (parameter1 == KEY_BACK) {
+            CloseApp();
+        }
+        break;
+    case EVT_HIDE:
+        /* Opening InkView's keyboard also hides the application surface. */
+        if (app.editor.field == UI_EDIT_NONE) {
+            enter_background();
+        }
+        break;
+    case EVT_BACKGROUND:
+        enter_background();
+        break;
     case EVT_EXIT:
-        ClearTimer(refresh);
-        if (opened) { ec_services_close(&config,&services); opened=0; }
-        if (body_font) { CloseFont(body_font); body_font=NULL; }
-        if (small_font) { CloseFont(small_font); small_font=NULL; }
-        if (title_font) { CloseFont(title_font); title_font=NULL; }
-        OPENSSL_cleanse(keyboard,sizeof keyboard); OPENSSL_cleanse(pending_password,sizeof pending_password);
+        close_application();
         break;
     }
     return 0;
 }
+
 int main(void) {
     umask(0077);
-    const char *root="/mnt/ext1/system/share/easy-connect";
+    const char *root = EC_DEFAULT_ROOT;
 #ifdef EC_UI_TEST
-    if (getenv("EC_UI_ROOT")) root=getenv("EC_UI_ROOT");
+    if (getenv("EC_UI_ROOT")) {
+        root = getenv("EC_UI_ROOT");
+    }
 #endif
-    if (ec_config_load(&config,root) || ec_services_open(&config,&services)) return 1;
-    opened=1;
-    InkViewMain(handler);
-    if (opened) ec_services_close(&config,&services);
+    if (ec_config_load(&app.config, root) || ec_services_open(&app.config, &app.services)) {
+        return 1;
+    }
+    app.services_open = true;
+    app.ftp_rootless = geteuid() != 0;
+    struct passwd *user = getpwuid(geteuid());
+    snprintf(app.ssh_user, sizeof app.ssh_user, "%s", user ? user->pw_name : "unknown");
+    InkViewMain(handle_event);
+    close_application();
     return 0;
 }
