@@ -30,6 +30,36 @@ class ControllerTests(unittest.TestCase):
         self.assertIn('UID:', result.stdout)
         self.assertIn('bin/dropbear: missing', result.stdout)
 
+    @unittest.skipUnless(sys.platform.startswith('linux'), 'Linux ioctl fallback')
+    def test_network_address_survives_denied_getifaddrs(self):
+        baseline = self.run_cli('doctor')
+        addresses = [line for line in baseline.stdout.splitlines()
+                     if line.startswith('Connection address:')]
+        if not addresses:
+            self.skipTest('No active IPv4 interface on test host')
+        source, library = self.root / 'deny-network.c', self.root / 'deny-network.so'
+        source.write_text('#include <ifaddrs.h>\n#include <errno.h>\n'
+            'int getifaddrs(struct ifaddrs **out) { *out=0; errno=EACCES; return -1; }\n')
+        subprocess.run(['cc', '-shared', '-fPIC', str(source), '-o', str(library)], check=True)
+        result = subprocess.run([str(BINARY), '--root', str(self.root), 'doctor'],
+            env=dict(os.environ, LD_PRELOAD=str(library)), capture_output=True, text=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(addresses[0], result.stdout)
+
+    def test_factory_config_is_used_until_saved_settings_exist(self):
+        (self.root / 'easy-connect.conf.default').write_text(
+            'auth=password\nftp_auth=password\nssh_port=2233\n')
+        result = self.run_cli('doctor')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('2233 auth=password', result.stdout)
+        self.assertFalse((self.root / 'easy-connect.conf').exists())
+        (self.root / 'easy-connect.conf').write_text('auth=key\nssh_port=2244\n')
+        result = self.run_cli('doctor')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('2244 auth=key', result.stdout)
+        (self.root / 'easy-connect.conf').write_text('invalid configuration\n')
+        self.assertNotEqual(self.run_cli('doctor').returncode, 0)
+
     def test_invalid_config_rejected(self):
         for setting in ('ssh_port=22', 'ssh_port=65536', 'ssh_port=2222;id',
                         'auth=none', 'auth=', 'ftp_auth=none', 'bind_address=localhost',

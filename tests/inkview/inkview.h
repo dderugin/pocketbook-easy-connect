@@ -2,12 +2,14 @@
 #ifndef EC_TEST_INKVIEW_H
 #define EC_TEST_INKVIEW_H
 typedef struct { int size; } ifont;
+typedef struct icanvas_s icanvas;
 typedef int (*iv_handler)(int,int,int);
 #define BLACK 0
 #define DGRAY 0x555555
 #define LGRAY 0xaaaaaa
 #define WHITE 0xffffff
 #define ALIGN_LEFT 1
+#define PANEL_DISABLED 0
 #define DEFAULTFONT "test"
 #define KBD_NUMERIC 4
 #define KBD_PASSWORD 0x100
@@ -19,12 +21,18 @@ typedef int (*iv_handler)(int,int,int);
 #define EVT_HIDE 5
 #define EVT_BACKGROUND 6
 #define EVT_EXIT 7
+#define EVT_REPAINT 43
+#define EVT_ORIENTATION 32
 int ScreenWidth(void);
 int ScreenHeight(void);
 ifont *OpenFont(const char *,int,int);
 void CloseFont(ifont *);
 void SetFont(const ifont *,int);
 void ClearScreen(void);
+void SetCanvas(icanvas *);
+void SetPanelType(int);
+int GetPanelType(void);
+void SetClip(int,int,int,int);
 char *DrawTextRect(int,int,int,int,const char *,int);
 void DrawRect(int,int,int,int,int);
 void FillArea(int,int,int,int,int);

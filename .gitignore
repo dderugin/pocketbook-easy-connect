@@ -19,3 +19,7 @@ new_host_ed25519
 authorized_keys
 *.log
 /diagnostics.txt
+
+# Local IDE project files
+.idea/
+*.iml

@@ -163,6 +163,13 @@ int ec_config_load(ec_config *config, const char *root) {
         return -1;
     }
     FILE *file = fopen(path, "r");
+    if (!file && errno == ENOENT) {
+        /* Package defaults never overwrite saved settings on an upgrade. */
+        if (ec_path(path, sizeof path, config->root, "easy-connect.conf.default")) {
+            return -1;
+        }
+        file = fopen(path, "r");
+    }
     if (!file) {
         return errno == ENOENT ? 0 : ec_error("read config: %s", strerror(errno));
     }

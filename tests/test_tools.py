@@ -215,6 +215,7 @@ class PackageTests(unittest.TestCase):
         (self.root / 'work/sdk/SDK-B288-6.10.7z').write_bytes(b'SDK ARCHIVE MUST NOT SHIP')
         (self.root / 'data/EasyConnect.app').write_text('#!/bin/sh\nexec application\n')
         (self.root / 'data/easy-connect.conf.example').write_text('auth=key\n')
+        (self.root / 'data/easy-connect.conf.default').write_text('auth=password\nftp_auth=password\n')
         for name in ('host_ed25519', 'password.hash', 'ftp-password.hash', 'authorized_keys'):
             (self.root / 'state' / name).write_text('LIVE SECRET MUST NOT SHIP')
         (self.root / 'easy-connect.conf').write_text('LIVE SETTINGS MUST NOT SHIP')
@@ -242,33 +243,51 @@ class PackageTests(unittest.TestCase):
         with mock.patch.object(sys, 'argv', ['package.py', '--build', str(self.root / 'build')]):
             self.tool.main()
 
-    def test_release_layout_includes_executables_licenses_and_corresponding_sources(self):
+    def test_install_zip_contains_only_runtime_and_factory_config(self):
         self.package()
         prefix = 'system/share/easy-connect/'
+        expected = {'applications/EasyConnect.app', prefix + 'easy-connect.conf.default'}
+        expected.update(prefix + 'bin/' + name for name in self.binaries)
         with zipfile.ZipFile(self.zip) as archive:
+            self.assertEqual(set(archive.namelist()), expected)
+            self.assertIn(b'auth=password', archive.read(prefix + 'easy-connect.conf.default'))
+            for path in expected - {prefix + 'easy-connect.conf.default'}:
+                self.assertEqual((archive.getinfo(path).external_attr >> 16) & 0o777, 0o755)
+            # Applying an update cannot overwrite live settings or credentials.
+            device = self.root / 'device'
+            state = device / prefix / 'state'
+            state.mkdir(parents=True)
+            config = state.parent / 'easy-connect.conf'
+            config.write_bytes(b'auth=key\nssh_port=2233\n')
+            (state / 'password.hash').write_bytes(b'keep password')
+            archive.extractall(device)
+            self.assertEqual(config.read_bytes(), b'auth=key\nssh_port=2233\n')
+            self.assertEqual((state / 'password.hash').read_bytes(), b'keep password')
+
+    def test_sources_and_notices_are_in_separate_companion_archive(self):
+        self.package()
+        companion = self.zip.with_name(self.zip.stem + '-sources.zip')
+        with zipfile.ZipFile(companion) as archive:
             names = set(archive.namelist())
-            for name in self.binaries:
-                self.assertIn(prefix + 'bin/' + name, names)
-            for path in ('licenses/dropbear/LICENSE', 'licenses/vsftpd/COPYING', 'licenses/openssl/openssl.txt',
-                         'source/sdk.json',
+            for path in ('licenses/dropbear/LICENSE', 'licenses/vsftpd/COPYING',
+                         'licenses/openssl/openssl.txt', 'source/sdk.json',
                          'source/src/source.txt', 'source/adapters/source.txt',
                          'source/tools/source.txt', 'source/tests/source.txt',
                          'source/CMakeLists.txt', 'source/work/downloads/dropbear.tar.gz',
-                         'source/work/downloads/vsftpd.tar.gz', 'easy-connect.conf.example'):
-                self.assertIn(prefix + path, names)
-            for path in ['applications/EasyConnect.app'] + [prefix + 'bin/' + name for name in self.binaries]:
-                self.assertEqual((archive.getinfo(path).external_attr >> 16) & 0o777, 0o755)
+                         'source/work/downloads/vsftpd.tar.gz', 'build-info.json'):
+                self.assertIn(path, names)
             for path in names:
                 self.assertFalse(path.startswith('/') or '..' in Path(path).parts)
-                self.assertNotIn(b'SDK ARCHIVE MUST NOT SHIP', archive.read(path))
-                self.assertNotIn(b'LIVE SECRET MUST NOT SHIP', archive.read(path))
-                self.assertNotIn(b'LIVE SETTINGS MUST NOT SHIP', archive.read(path))
-            self.assertFalse(any('/state/' in path or path.endswith('/easy-connect.conf') for path in names))
+                for secret in (b'SDK ARCHIVE MUST NOT SHIP', b'LIVE SECRET MUST NOT SHIP',
+                               b'LIVE SETTINGS MUST NOT SHIP'):
+                    self.assertNotIn(secret, archive.read(path))
+            self.assertFalse(any(path.startswith(('bin/', 'applications/')) for path in names))
 
     def test_manifest_and_release_checksum_match_actual_bytes(self):
         self.package()
-        with zipfile.ZipFile(self.zip) as archive:
-            info = json.loads(archive.read('system/share/easy-connect/build-info.json'))
+        companion = self.zip.with_name(self.zip.stem + '-sources.zip')
+        with zipfile.ZipFile(companion) as archive:
+            info = json.loads(archive.read('build-info.json'))
         self.assertEqual(info['device_validation'], 'not-performed')
         self.assertEqual(info['sdk'], json.loads((self.root / 'sdk.json').read_text()))
         self.assertEqual(info['dependencies'], json.loads((self.root / 'dependencies.json').read_text()))
@@ -276,6 +295,8 @@ class PackageTests(unittest.TestCase):
                                             for name, path in self.binaries.items()})
         self.assertEqual(self.zip.with_suffix('.zip.sha256').read_text(),
                          hashlib.sha256(self.zip.read_bytes()).hexdigest() + '  ' + self.zip.name + '\n')
+        self.assertEqual(companion.with_suffix('.zip.sha256').read_text(),
+                         hashlib.sha256(companion.read_bytes()).hexdigest() + '  ' + companion.name + '\n')
 
     def test_all_five_binaries_must_be_little_endian_arm32(self):
         for name, path in self.binaries.items():

@@ -67,10 +67,11 @@ class SSHTests(unittest.TestCase):
         return subprocess.run(args, stdin=subprocess.DEVNULL, capture_output=True, text=True, env=env, timeout=15)
 
     @contextmanager
-    def server(self, auth):
+    def server(self, auth, extra_env=None):
         (self.root / 'easy-connect.conf').write_text(f'auth={auth}\nbind_address=127.0.0.1\nssh_port={self.port}\n')
         log = tempfile.TemporaryFile(mode='w+t')
-        process = subprocess.Popen([str(BINARY), '--root', str(self.root), 'serve', 'ssh'], stdout=log, stderr=log)
+        process = subprocess.Popen([str(BINARY), '--root', str(self.root), 'serve', 'ssh'], stdout=log, stderr=log,
+                                   env=dict(os.environ, **(extra_env or {})))
         try:
             deadline = time.monotonic()+8
             while time.monotonic()<deadline:
@@ -100,6 +101,34 @@ class SSHTests(unittest.TestCase):
         result = self.ssh(*args, **kwargs)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout, 'easy-connect-ok')
+
+    @unittest.skipUnless(sys.platform.startswith('linux'), 'Linux openpty denial fixture')
+    def test_denied_pty_still_allows_shell_and_command(self):
+        # Model the reader account's PTY restriction without changing OS permissions.
+        source = Path(self.temp.name) / 'deny-pty.c'
+        library = source.with_suffix('.so')
+        source.write_text("#include <errno.h>\n#include <termios.h>\n#include <sys/ioctl.h>\n"
+                          "int openpty(int *m,int *s,char *n,const struct termios *t,"
+                          "const struct winsize *w) { errno=EACCES; return -1; }\n")
+        subprocess.run(['cc', '-shared', '-fPIC', str(source), '-o', str(library)], check=True)
+        with self.server('key', {'LD_PRELOAD': str(library)}):
+            args, env = self.ssh_command()
+            args.pop()  # Request a login shell rather than an exec command.
+            # Default SSH with a real local terminal requests an optional PTY.
+            # Explicit -t/-tt make OpenSSH abort when that request is denied.
+            master, slave = os.openpty()
+            try:
+                os.write(master, b'printf easy-connect-ok; exit\n')
+                result = subprocess.run(args, stdin=slave,
+                    capture_output=True, text=True, env=env, timeout=15)
+            finally:
+                os.close(master)
+                os.close(slave)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('easy-connect-ok', result.stdout)
+            self.assertIn('PTY allocation request failed', result.stderr)
+            self.assertNotIn('shell request failed', result.stderr)
+            self.assert_ssh_ok()  # Explicit commands without a PTY also continue to work.
 
     def test_key_only_and_password_rejection(self):
         with self.server('key'):

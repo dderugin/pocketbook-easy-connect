@@ -24,30 +24,22 @@ static void notify(const char *message) {
     set_notice(app.active_tab, message);
 }
 
-static void read_device_address(char *out, size_t size) {
-    struct ifaddrs *interfaces = NULL;
-    snprintf(out, size, "not connected");
-    if (getifaddrs(&interfaces)) {
-        return;
+static bool read_device_address(char *out, size_t size) {
+#ifdef EC_UI_TEST
+    const char *address = getenv("EC_UI_ADDRESS");
+    if (address) {
+        snprintf(out, size, "%s", *address ? address : "not connected");
+        return *address != '\0';
     }
-    for (struct ifaddrs *interface = interfaces; interface; interface = interface->ifa_next) {
-        if (!interface->ifa_addr || interface->ifa_addr->sa_family != AF_INET ||
-            !(interface->ifa_flags & IFF_UP) || (interface->ifa_flags & IFF_LOOPBACK)) {
-            continue;
-        }
-        const struct sockaddr_in *address = (const struct sockaddr_in *)interface->ifa_addr;
-        if (inet_ntop(AF_INET, &address->sin_addr, out, (socklen_t)size)) {
-            break;
-        }
-    }
-    freeifaddrs(interfaces);
+#endif
+    return ec_network_address(out, size);
 }
 
 static void redraw(void) {
     if (app.editor.field != UI_EDIT_NONE) {
         return;
     }
-    read_device_address(app.device_address, sizeof app.device_address);
+    app.network_available = read_device_address(app.device_address, sizeof app.device_address);
     ui_draw(&app);
 }
 
@@ -280,6 +272,18 @@ static void start_selected_service(void) {
     if (ui_is_running(&app, app.active_tab)) {
         return;
     }
+    if (app.active_tab == UI_TAB_SSH && app.config.auth != EC_PASSWORD &&
+        !ec_key_count(&app.config)) {
+        notify("Add a .pub key at the path shown, or select Password and set one.");
+        return;
+    }
+    bool needs_password = app.active_tab == UI_TAB_SSH ? app.config.auth != EC_KEYS
+                                                      : app.config.ftp_auth == EC_FTP_PASSWORD;
+    if (needs_password && !ec_has_password(&app.config, ui_service_name(app.active_tab))) {
+        notify("Set a password, then press Start again.");
+        begin_edit(UI_EDIT_PASSWORD);
+        return;
+    }
     if (ec_start(&app.config, &app.services, ui_service_name(app.active_tab))) {
         notify(ec_last_error());
         return;
@@ -312,6 +316,8 @@ static void save_diagnostics(void) {
         return;
     }
     ec_doctor(&app.config, out);
+    fprintf(out, "UI viewport: %d x %d\nUI screen: %d x %d\nUI panel type: %d\n",
+            app.screen_width, app.screen_height, ScreenWidth(), ScreenHeight(), GetPanelType());
     fclose(out);
     notify("Saved diagnostics.txt in the app folder.");
 }
@@ -373,9 +379,13 @@ static void handle_pointer_up(int screen_x, int screen_y) {
         return;
     }
     ec_poll(&app.services);
-    int logical_x = screen_x * UI_CANVAS_WIDTH / ScreenWidth();
-    int logical_y = screen_y * UI_CANVAS_HEIGHT / ScreenHeight();
+    int logical_x = screen_x * UI_CANVAS_WIDTH / app.screen_width;
+    int logical_y = screen_y * UI_CANVAS_HEIGHT / app.screen_height;
     ui_control_id control = ui_hit_test(app.active_tab, &app.config, logical_x, logical_y);
+    if (!app.network_available && control != UI_SSH_TAB && control != UI_FTP_TAB &&
+        control != UI_EXIT && control != UI_SAVE_DIAGNOSTICS) {
+        return;
+    }
     activate_control(control);
     if (control != UI_EXIT) {
         redraw();
@@ -445,6 +455,11 @@ static void close_application(void) {
 static int handle_event(int type, int parameter1, int parameter2) {
     switch (type) {
     case EVT_INIT:
+        /* Full-screen layout: the system panel otherwise offsets scanout and
+         * wraps bottom rows to the top after firmware refreshes. */
+        SetPanelType(PANEL_DISABLED);
+        app.screen_width = ScreenWidth();
+        app.screen_height = ScreenHeight();
         if (open_fonts()) {
             update_fingerprint();
         }
@@ -452,6 +467,14 @@ static int handle_event(int type, int parameter1, int parameter2) {
     case EVT_SHOW:
         redraw();
         SetHardTimer("easy-connect-status", refresh_status, UI_STATUS_REFRESH_MS);
+        break;
+    case EVT_REPAINT:
+        redraw();
+        break;
+    case EVT_ORIENTATION:
+        app.screen_width = ScreenWidth();
+        app.screen_height = ScreenHeight();
+        redraw();
         break;
     case EVT_POINTERUP:
         handle_pointer_up(parameter1, parameter2);

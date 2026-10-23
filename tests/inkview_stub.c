@@ -9,6 +9,8 @@ static char svg[131072], plain[32768];
 static size_t used = 0, plain_used = 0;
 static const ifont *font;
 static int color = BLACK, closed = 0;
+/* A top system panel shifts scanout and wraps bottom rows to the top. */
+static int panel_type = 2;
 static void (*keyboard_callback)(char *) = NULL;
 static void (*timer_callback)(void) = NULL;
 static char *keyboard_buffer;
@@ -75,6 +77,25 @@ void SetFont(const ifont *f, int value) {
     color = value;
 }
 
+void SetCanvas(icanvas *canvas) {
+    if (canvas) {
+        abort();
+    }
+}
+
+int GetPanelType(void) {
+    return panel_type;
+}
+
+void SetPanelType(int type) {
+    panel_type = type;
+}
+
+static int displayed_y(int y) {
+    int offset = panel_type == PANEL_DISABLED ? 0 : ScreenHeight() / 12;
+    return (y + offset) % ScreenHeight();
+}
+
 void ClearScreen(void) {
     used = plain_used = 0;
     append("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"%d\" height=\"%d\" viewBox=\"0 0 %d "
@@ -109,7 +130,7 @@ char *DrawTextRect(int x, int y, int w, int h, const char *value, int flags) {
         }
         append("<text x=\"%d\" y=\"%d\" font-family=\"DejaVu Sans,Arial,sans-serif\" "
                "font-size=\"%d\" fill=\"rgb(%d,%d,%d)\">",
-               x, y + font->size + row * font->size * 5 / 4, font->size, (color >> 16) & 255,
+               x, displayed_y(y + font->size + row * font->size * 5 / 4), font->size, (color >> 16) & 255,
                (color >> 8) & 255, color & 255);
         escaped(p, length);
         append("</text>");
@@ -125,12 +146,19 @@ char *DrawTextRect(int x, int y, int w, int h, const char *value, int flags) {
 void DrawRect(int x, int y, int w, int h, int value) {
     append("<rect x=\"%d\" y=\"%d\" width=\"%d\" height=\"%d\" fill=\"none\" "
            "stroke=\"rgb(%d,%d,%d)\"/>",
-           x, y, w, h, (value >> 16) & 255, (value >> 8) & 255, value & 255);
+           x, displayed_y(y), w, h, (value >> 16) & 255, (value >> 8) & 255, value & 255);
 }
 
 void FillArea(int x, int y, int w, int h, int value) {
-    append("<rect x=\"%d\" y=\"%d\" width=\"%d\" height=\"%d\" fill=\"rgb(%d,%d,%d)\"/>", x, y, w,
+    append("<rect x=\"%d\" y=\"%d\" width=\"%d\" height=\"%d\" fill=\"rgb(%d,%d,%d)\"/>", x, displayed_y(y), w,
            h, (value >> 16) & 255, (value >> 8) & 255, value & 255);
+}
+
+void SetClip(int x, int y, int w, int h) {
+    (void)x;
+    (void)y;
+    (void)w;
+    (void)h;
 }
 
 void FullUpdate(void) {}
@@ -192,9 +220,21 @@ void InkViewMain(iv_handler handler) {
             void (*callback)(char *) = keyboard_callback;
             keyboard_callback = NULL;
             callback(NULL);
+        } else if (!strcmp(command, "network")) {
+            setenv("EC_UI_ADDRESS", "", 1);
+        } else if (!strncmp(command, "network ", 8)) {
+            setenv("EC_UI_ADDRESS", command + 8, 1);
         } else if (!strcmp(command, "hide")) {
             handler(EVT_HIDE, 0, 0);
+        } else if (!strcmp(command, "repaint")) {
+            SetCanvas(NULL);
+            ClearScreen();
+
+            handler(EVT_REPAINT, 0, 0);
+        } else if (!strcmp(command, "orientation")) {
+            handler(EVT_ORIENTATION, 0, 0);
         } else if (!strcmp(command, "show")) {
+            panel_type = 2; /* Firmware restores its panel on foreground entry. */
             handler(EVT_SHOW, 0, 0);
         } else if (!strcmp(command, "background")) {
             handler(EVT_BACKGROUND, 0, 0);

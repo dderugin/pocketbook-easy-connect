@@ -4,7 +4,9 @@ Standalone SSH and FTP communication app for **PocketBook Touch HD 3 / PB632,
 firmware U632.6.11.2001**. Independent of CoolReader; it reuses the same
 B288 / Cortex-A7 softfp SDK target and USB installation layout.
 
-**Development version, not yet validated on a physical reader.**
+[Download](https://pocketbook.nimbushub.eu/easy-connect.html) · [Installation and connection guide](https://pocketbook.nimbushub.eu/easy-connect.html#installation) · [GitHub repository](https://github.com/dderugin/pocketbook-easy-connect)
+
+**Development release with limited physical-device testing on PB632.**
 
 ## Implemented
 
@@ -22,10 +24,12 @@ B288 / Cortex-A7 softfp SDK target and USB installation layout.
 - Separate device build/package scripts, checksummed source dependencies, and
   automated controller/real SSH integration tests.
 
-The Linux ARM build uses the real B288 SDK in CI; physical-reader validation
-remains pending. Normal PocketBook app privileges are unknown until the
-diagnostic app is run. SSH and FTP transfers are tested locally as a normal user;
-physical-reader verification is pending. No root or jailbreak is needed for FTP.
+The Linux ARM build uses the real B288 SDK. On a physical PB632, the app runs
+as `reader` (UID 101); anonymous FTP access and SSH commands/basic shell access
+have been confirmed. Firmware denied PTY allocation, so the SSH hint opens a
+shell over pipes. Full device acceptance testing, the latest UI corrections,
+and other models/firmware remain unverified. Host integration tests cover SSH
+and FTP transfers as a normal user. No root or jailbreak is needed for FTP.
 
 ## Build and test on a computer
 
@@ -92,33 +96,54 @@ Build commands never download the SDK automatically. The SDK's Linux binaries
 cannot run natively on macOS; use Linux or the GitHub Actions ARM build.
 
 The controller and daemon adapters link the SDK's ARM OpenSSL crypto archive
-statically (OpenSSL 3.4.1, with its license notice included). InkView headers and
+statically (OpenSSL 3.4.1, with its license notice in the companion archive). InkView headers and
 its link library are located inside the SDK sysroot; the reader supplies InkView at runtime. The build rejects an unexpected
 shared OpenSSL dependency and writes ELF headers, interpreter, dependencies,
 ARM attributes and symbol versions to `build-device/arm-report.txt`.
 
 The build creates `dist/easy-connect-pb632-0.1.0.zip` and its SHA-256 checksum.
 The **B288 ARM build** workflow performs the same build and uploads a development
-artifact. Packaging requires all five ARM executables and includes licenses,
-complete application/daemon sources, pinned daemon archives and SDK metadata.
-The SDK archive itself is excluded from the ZIP.
+artifact. The installation ZIP contains only seven files: the application launcher,
+five ARM executables, and `easy-connect.conf.default`. A separate
+`easy-connect-pb632-0.1.0-sources.zip` contains licenses, complete application/daemon
+sources, pinned daemon archives, build checksums and SDK metadata. Keep this
+companion archive on the computer; it does not need to be installed on the reader.
+The SDK archive itself is excluded from both ZIPs.
 
 Compare `arm-report.txt` with the actual firmware before installation. A successful
 cross build does not establish firmware compatibility or physical-reader support.
 
+### Local Docker build (including macOS)
+
+Docker runs the required Linux x86_64 toolchain, including on Apple Silicon:
+
+```sh
+docker build --platform linux/amd64 -f tools/Dockerfile -t easy-connect-builder .
+docker run --rm --platform linux/amd64 -v "$PWD:/project" easy-connect-builder
+```
+
+The first run downloads and verifies the pinned SDK (about 613 MiB) and daemon
+sources. Later runs reuse the `work/` cache. The ZIP and checksum are written to
+`dist/`, and the ARM compatibility report to `build-device/arm-report.txt`.
+
 ## Install and configure
 
 1. Extract/merge the ZIP into the reader's USB storage root.
-2. Optionally copy `system/share/easy-connect/easy-connect.conf.example` to
-   `easy-connect.conf` for advanced configuration; the UI saves its own settings.
-3. Import SSH public keys over USB if using key access. Passwords may be set in
-   the corresponding tab or provisioned with the host tool below.
+2. Factory configuration is included as `system/share/easy-connect/easy-connect.conf.default`.
+   The app reads it when no saved `easy-connect.conf` exists. Saved settings always
+   take precedence; changing a setting in the UI writes `easy-connect.conf`.
+3. SSH and FTP initially use separate application passwords. Press **Start** in
+   each tab to set its password, then press **Start** again to run the service.
+   For SSH key access, select **Public key** and import your `.pub` key over USB.
 4. Safely eject USB, connect the reader to Wi-Fi using its settings, then open
    **Applications → EasyConnect**.
 5. Start the desired service. Closing or backgrounding the app stops services.
 
-The ZIP never includes live configuration, credentials, or host keys, so upgrades
-preserve them. It does not modify CoolReader files or firmware system accounts.
+The ZIP includes factory configuration only, with no shared password or anonymous
+access enabled. It never includes saved `easy-connect.conf`, credentials or host
+keys, so upgrades preserve them. The app creates state and daemon configuration
+files as needed; missing credentials prompt for setup instead of being shipped as
+empty placeholder files. It does not modify CoolReader files or firmware system accounts.
 Services do not automatically start at boot. Keep the app in the foreground for
 this first version; Wi-Fi keepalive and suspend/USB event behavior need device validation.
 
@@ -132,6 +157,11 @@ The server fingerprint is displayed after the host key has been created.
 The **FTP** tab shows daemon status, its connection URL, Start/Stop buttons,
 Password / No password selection, editable control/passive ports and starting
 folder, and the relevant username/password or anonymous-login details.
+
+The interface checks the device IP address every second. While no address is
+available, service buttons and settings are disabled and a Wi-Fi connection
+hint is shown. Controls enable automatically when an address appears; no manual
+refresh is required. Tabs, Exit and Save diagnostics remain available offline.
 
 Changes save immediately and survive app restarts. Configuration for a running
 daemon is locked; stop that daemon before editing it. Stopping SSH leaves FTP
@@ -156,13 +186,16 @@ listed one per line. Keep the private client key on the computer. Use `auth=key`
 The screen reports the actual device account name and address:
 
 ```sh
-ssh -p 2222 -i ~/.ssh/pocketbook DEVICE_USER@DEVICE_IP
+ssh -T -p 2222 -i ~/.ssh/pocketbook DEVICE_USER@DEVICE_IP '/bin/sh -i'
 ```
 
 Compare the server fingerprint with the device screen before accepting it.
 SSH sessions have the launching account's permissions; ordinary launches do not
-provide root access. Both command execution and interactive PTY access require
-physical-reader verification. SFTP and SCP support are not included yet.
+provide root access. Firmware may deny PTY allocation to the normal reader account.
+The connection hint uses `ssh -T` to skip PTY allocation and `/bin/sh -i` to show
+a shell prompt over ordinary pipes. The shell may print "can't access tty; job
+control turned off"; basic commands still work. Terminal applications and job
+control require PTY access. Physical-reader verification remains pending. SFTP and SCP support are not included yet.
 
 ### SSH password
 
@@ -195,6 +228,8 @@ the separate FTP password. Set it in **FTP → Password → Set password** or wi
 the host tool above. The default control port is **2121**; passive data ports are
 **50000–50009**. Active-mode FTP is disabled.
 Plain FTP sends passwords and file contents unencrypted; use it on a trusted LAN.
+macOS Finder mounts FTP connections read-only. Use an FTP client with upload
+support to create, upload, rename or delete files.
 
 **FTP → No password** saves `ftp_auth=anonymous`. Clients log in as `anonymous`
 (or `ftp`) without an application password. No password file is required. This

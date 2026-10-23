@@ -16,10 +16,10 @@ class UITests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root=Path(self.temp.name)
 
-    def run_ui(self,events, *, width=None, height=None):
+    def run_ui(self,events, *, width=None, height=None, address='192.0.2.1'):
         script=self.root/'events.txt'
         script.write_text('\n'.join(events)+'\n')
-        environment = dict(os.environ, EC_UI_ROOT=str(self.root), EC_UI_EVENTS=str(script))
+        environment = dict(os.environ, EC_UI_ROOT=str(self.root), EC_UI_EVENTS=str(script), EC_UI_ADDRESS=address)
         if width is not None:
             environment['EC_UI_WIDTH'] = str(width)
         if height is not None:
@@ -28,6 +28,18 @@ class UITests(unittest.TestCase):
                               capture_output=True,text=True,timeout=15)
         self.assertEqual(result.returncode,0,result.stderr)
         return result
+
+    def test_factory_install_prompts_for_password_without_missing_file_error(self):
+        defaults = Path(__file__).resolve().parents[1] / 'data/easy-connect.conf.default'
+        (self.root / 'easy-connect.conf.default').write_bytes(defaults.read_bytes())
+        text = self.root / 'first-run.txt'
+        result = self.run_ui(['press start', 'key first setup password',
+                             'key first setup password', f'text {text}'])
+        self.assertEqual(result.stdout.count('KEYBOARD masked'), 2)
+        self.assertIn('Password: configured', text.read_text())
+        self.assertNotIn('No such file', result.stderr)
+        self.assertTrue((self.root / 'state/password.hash').is_file())
+        self.assertEqual((self.root / 'easy-connect.conf.default').read_bytes(), defaults.read_bytes())
 
     def test_tabs_and_corresponding_details(self):
         ssh,ftp=self.root/'ssh.txt',self.root/'ftp.txt'
@@ -189,6 +201,71 @@ class UITests(unittest.TestCase):
         self.assertIn('STOPPED', text.read_text())
         self.assertNotIn('\nRUNNING\n', text.read_text())
         self.assertNotIn('Daemon started.', text.read_text())
+
+    def test_start_explains_missing_ssh_key_without_creating_credentials(self):
+        text = self.root / 'missing-key.txt'
+        result = self.run_ui(['press start', f'text {text}'])
+        self.assertIn('Add a .pub key', text.read_text())
+        self.assertNotIn('No such file', result.stderr)
+        self.assertFalse((self.root / 'state/authorized_keys').exists())
+
+    def test_start_prompts_for_missing_password_for_each_service(self):
+        for service in ('ssh', 'ftp'):
+            with self.subTest(service=service):
+                text = self.root / (service + '-setup.txt')
+                events = ['press ssh-password'] if service == 'ssh' else ['press ftp-tab']
+                result = self.run_ui(events + ['press start', 'key new setup password',
+                    'key new setup password', f'text {text}'])
+                self.assertEqual(result.stdout.count('KEYBOARD masked'), 2)
+                name = 'password.hash' if service == 'ssh' else 'ftp-password.hash'
+                self.assertTrue((self.root / 'state' / name).is_file())
+                self.assertIn('Password: configured', text.read_text())
+                self.assertNotIn('No such file', result.stderr)
+                self.assertIn('STOPPED', text.read_text())
+
+    def test_footer_stays_at_bottom_after_refresh_and_keyboard(self):
+        import xml.etree.ElementTree as ET
+        for width, height in ((720, 960), (1072, 1448), (1404, 1872)):
+            with self.subTest(width=width, height=height):
+                snapshots = [self.root / f'frame-{i}.svg' for i in range(4)]
+                self.run_ui([f'snapshot {snapshots[0]}', 'repaint',
+                    f'snapshot {snapshots[1]}', 'press ssh-port', 'cancel',
+                    'hide', 'show', f'snapshot {snapshots[2]}', 'orientation',
+                    'press ftp-tab', 'press ssh-tab', 'press ftp-tab', 'repaint',
+                    f'snapshot {snapshots[3]}'],
+                    width=width, height=height)
+                positions = []
+                for snapshot in snapshots:
+                    elements = ET.parse(snapshot).getroot().iter()
+                    footer = {e.text: int(e.attrib['y']) for e in elements
+                              if e.tag.endswith('text') and e.text in ('Save diagnostics', 'Exit')}
+                    self.assertEqual(set(footer), {'Save diagnostics', 'Exit'})
+                    self.assertTrue(all(y > height * .9 for y in footer.values()))
+                    positions.append(footer)
+                self.assertTrue(all(p == positions[0] for p in positions))
+
+    def test_offline_controls_are_blocked_then_enable_automatically(self):
+        offline, online = self.root / 'offline.txt', self.root / 'online.txt'
+        offline_ssh = self.root / 'offline-ssh.txt'
+        self.run_ui(['press ssh-password', 'press start', 'press ftp-tab',
+                     f'text {offline}', 'press ftp-anonymous', 'press ftp-port',
+                     'press ssh-tab', f'text {offline_ssh}', 'press save-diagnostics',
+                     'network 192.0.2.42', 'tick', 'press ssh-port', 'key 2233',
+                     'press ftp-tab', f'text {online}'], address='')
+        self.assertIn('Waiting for an IP address', offline.read_text())
+        self.assertIn('FTP daemon', offline.read_text())
+        self.assertIn('SSH daemon', offline_ssh.read_text())
+        self.assertNotIn('Login as anonymous', offline.read_text())
+        self.assertTrue((self.root / 'diagnostics.txt').is_file())
+        self.assertIn('192.0.2.42', online.read_text())
+        self.assertIn('FTP daemon', online.read_text())
+        self.assertIn('ssh_port=2233', (self.root / 'easy-connect.conf').read_text())
+
+    def test_network_loss_disables_controls_on_next_status_tick(self):
+        text = self.root / 'lost.txt'
+        self.run_ui(['network', 'tick', 'press ssh-password', 'press start', f'text {text}'])
+        self.assertIn('Waiting for an IP address', text.read_text())
+        self.assertFalse((self.root / 'easy-connect.conf').exists())
 
     def test_named_controls_follow_scaled_screen_geometry(self):
         for width, height in ((600, 800), (1072, 1448), (1440, 1920)):

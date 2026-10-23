@@ -3,6 +3,7 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <sys/types.h>
+#include <stdbool.h>
 #define EC_PATH 4096
 #define EC_DEFAULT_ROOT "/mnt/ext1/system/share/easy-connect"
 
@@ -53,6 +54,7 @@ int ec_has_password(const ec_config *config, const char *service);
 unsigned ec_key_count(const ec_config *config);
 int ec_private_dir(const char *path);
 int ec_copy_private(const char *source, const char *destination, int nonempty);
+bool ec_network_address(char *out, size_t size);
 int ec_doctor(const ec_config *config, FILE *out);
 int ec_services_open(ec_config *config, ec_services *services);
 int ec_start(ec_config *config, ec_services *services, const char *name);

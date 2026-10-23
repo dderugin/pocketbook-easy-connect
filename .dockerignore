@@ -1,0 +1,7 @@
+.git
+build*
+work
+dist
+state
+*.log
+__pycache__

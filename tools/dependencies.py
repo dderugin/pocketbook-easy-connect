@@ -96,6 +96,12 @@ def build(name, sdk, prefix):
         checked_replace(source / 'src/sysoptions.h',
                         '#if DROPBEAR_SVR_PASSWORD_AUTH && !HAVE_CRYPT',
                         '#if 0 /* Easy Connect uses OpenSSL PBKDF2 instead of crypt(). */')
+        # A rejected PTY request must not leave the channel marked as a PTY.
+        # PocketBook firmware can deny openpty() to the normal reader account;
+        # the subsequent shell/exec request must still work over ordinary pipes.
+        checked_replace(source / 'src/svr-chansession.c',
+                        'TRACE(("leave sessionpty: failed to allocate pty"))',
+                        'm_free(chansess->term);\n\t\tTRACE(("leave sessionpty: failed to allocate pty"))')
         checked_replace(source / 'src/svr-auth.c',
                         'if (!(DROPBEAR_SVR_MULTIUSER && uid == 0) && uid != ses.authstate.pw_uid)',
                         'if (uid != ses.authstate.pw_uid)')

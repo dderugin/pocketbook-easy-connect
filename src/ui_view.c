@@ -1,12 +1,14 @@
 #include "ui.h"
 #include <string.h>
 
+static int viewport_width, viewport_height;
+
 static int screen_x(int logical_x) {
-    return logical_x * ScreenWidth() / UI_CANVAS_WIDTH;
+    return logical_x * viewport_width / UI_CANVAS_WIDTH;
 }
 
 static int screen_y(int logical_y) {
-    return logical_y * ScreenHeight() / UI_CANVAS_HEIGHT;
+    return logical_y * viewport_height / UI_CANVAS_HEIGHT;
 }
 
 static void draw_text_in_rect(ui_rect bounds, const char *value, ifont *font, int color) {
@@ -21,10 +23,14 @@ static void draw_text(ui_text_id area, const char *value, ifont *font) {
 
 static void draw_button(const ui_app *app, ui_control_id control, const char *label, bool selected,
                         bool enabled) {
+    if (control != UI_SSH_TAB && control != UI_FTP_TAB &&
+        control != UI_EXIT && control != UI_SAVE_DIAGNOSTICS) {
+        enabled = enabled && app->network_available;
+    }
     ui_rect bounds = ui_control_bounds(control);
     if (selected) {
         FillArea(screen_x(bounds.x), screen_y(bounds.y), screen_x(bounds.width),
-                 screen_y(bounds.height), BLACK);
+                 screen_y(bounds.height), enabled ? BLACK : LGRAY);
     } else {
         DrawRect(screen_x(bounds.x), screen_y(bounds.y), screen_x(bounds.width),
                  screen_y(bounds.height), enabled ? BLACK : LGRAY);
@@ -35,7 +41,7 @@ static void draw_button(const ui_app *app, ui_control_id control, const char *la
                             bounds.height - UI_BUTTON_TEXT_VERTICAL_TRIM};
     int label_color = enabled ? BLACK : DGRAY;
     if (selected) {
-        label_color = WHITE;
+        label_color = enabled ? WHITE : DGRAY;
     }
     draw_text_in_rect(label_bounds, label, app->fonts.body, label_color);
 }
@@ -53,8 +59,10 @@ static void draw_header(const ui_app *app) {
               app->fonts.title);
     draw_text(UI_TEXT_STATUS, running ? "RUNNING" : "STOPPED", app->fonts.body);
 
-    if (app->active_tab == UI_TAB_SSH) {
-        snprintf(line, sizeof line, "ssh -p %u %s@%s", app->config.ssh_port, app->ssh_user,
+    if (!app->network_available) {
+        snprintf(line, sizeof line, "Waiting for Wi-Fi and an IP address.");
+    } else if (app->active_tab == UI_TAB_SSH) {
+        snprintf(line, sizeof line, "ssh -T -p %u %s@%s '/bin/sh -i'", app->config.ssh_port, app->ssh_user,
                  app->device_address);
     } else {
         const char *user =
@@ -142,6 +150,9 @@ static void draw_ftp_settings(const ui_app *app) {
 
 static void draw_footer(const ui_app *app) {
     const char *notice = app->notices[app->active_tab];
+    if (!app->network_available) {
+        notice = "Connect to Wi-Fi in device settings. Waiting for an IP address...";
+    }
     draw_text(UI_TEXT_NOTICE, *notice ? notice : "Stop this daemon before changing its settings.",
               app->fonts.small);
     draw_button(app, UI_SAVE_DIAGNOSTICS, "Save diagnostics", false, true);
@@ -152,6 +163,13 @@ void ui_draw(const ui_app *app) {
     if (app->editor.field != UI_EDIT_NONE || !app->fonts.body) {
         return;
     }
+    /* Firmware overlays can restore the system panel between frames. Disable
+     * it before repainting so scanout and pointer coordinates share origin 0. */
+    SetPanelType(PANEL_DISABLED);
+    viewport_width = app->screen_width;
+    viewport_height = app->screen_height;
+    SetCanvas(NULL);
+    SetClip(0, 0, viewport_width, viewport_height);
     ClearScreen();
     draw_header(app);
     if (app->active_tab == UI_TAB_SSH) {

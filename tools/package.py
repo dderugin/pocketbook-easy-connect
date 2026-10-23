@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Build a separate ZIP; never include device credentials or generated host keys."""
+"""Build a minimal installation ZIP and a separate source/notice archive."""
 import argparse
 import hashlib
 import json
 from pathlib import Path
 import shutil
 import struct
+import subprocess
 import zipfile
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -33,6 +34,7 @@ def main():
         (share / 'bin' / name).chmod(0o755)
     shutil.copy2(ROOT / 'data/EasyConnect.app', stage / 'applications/EasyConnect.app')
     (stage / 'applications/EasyConnect.app').chmod(0o755)
+    shutil.copy2(ROOT / 'data/easy-connect.conf.default', share)
     shutil.copy2(ROOT / 'data/easy-connect.conf.example', share)
     shutil.copy2(ROOT / 'README.md', share)
     shutil.copy2(ROOT / 'LICENSE', share)
@@ -55,7 +57,15 @@ def main():
         if hashlib.sha256(archive.read_bytes()).hexdigest() != dependency['sha256']:
             raise RuntimeError(f'Upstream source checksum mismatch: {name}')
         shutil.copy2(archive, downloads / name)
-    manifest = {'application':'Easy Connect','version':'0.1.0',
+    source_commit = source_dirty = None
+    if shutil.which('git'):
+        revision = subprocess.run(['git', '-C', str(ROOT), 'rev-parse', 'HEAD'],
+                                  capture_output=True, text=True)
+        source_commit = revision.stdout.strip() if revision.returncode == 0 else None
+        status = subprocess.run(['git', '-C', str(ROOT), 'status', '--porcelain'],
+                                capture_output=True, text=True)
+        source_dirty = bool(status.stdout.strip()) if status.returncode == 0 else None
+    manifest = {'source_commit': source_commit, 'source_dirty': source_dirty, 'application':'Easy Connect','version':'0.1.0',
                 'target':'PocketBook PB632 / U632.6.11.2001',
                 'device_validation':'not-performed',
                 'sdk':json.loads((ROOT / 'sdk.json').read_text()),
@@ -64,12 +74,21 @@ def main():
     (share / 'build-info.json').write_text(json.dumps(manifest,indent=2)+'\n')
     dest = ROOT / 'dist/easy-connect-pb632-0.1.0.zip'
     dest.parent.mkdir(exist_ok=True)
-    with zipfile.ZipFile(dest,'w',zipfile.ZIP_DEFLATED) as archive:
-        for path in sorted(stage.rglob('*')):
-            if path.is_file():
-                archive.write(path,path.relative_to(stage))
-    dest.with_suffix('.zip.sha256').write_text(hashlib.sha256(dest.read_bytes()).hexdigest()+'  '+dest.name+'\n')
-    print(dest)
+    runtime = [stage / 'applications/EasyConnect.app', share / 'easy-connect.conf.default']
+    runtime += [share / 'bin' / name for name in binaries]
+    companion = dest.with_name(dest.stem + '-sources.zip')
+    with zipfile.ZipFile(dest, 'w', zipfile.ZIP_DEFLATED) as archive:
+        for path in sorted(runtime):
+            archive.write(path, path.relative_to(stage))
+    # Keep corresponding source, notices and build evidence off the reader.
+    with zipfile.ZipFile(companion, 'w', zipfile.ZIP_DEFLATED) as archive:
+        for path in sorted(share.rglob('*')):
+            if path.is_file() and path not in runtime:
+                archive.write(path, path.relative_to(share))
+    for package in (dest, companion):
+        package.with_suffix('.zip.sha256').write_text(
+            hashlib.sha256(package.read_bytes()).hexdigest() + '  ' + package.name + '\n')
+        print(package)
 
 if __name__ == '__main__':
     main()

@@ -43,6 +43,8 @@ typedef struct {
     char device_address[64];
     char ssh_user[64];
     bool ftp_rootless;
+    bool network_available;
+    int screen_width, screen_height;
 } ui_app;
 
 static inline const char *ui_service_name(ui_tab tab) {
