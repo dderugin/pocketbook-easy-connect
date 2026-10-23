@@ -120,6 +120,8 @@ def build(name, sdk, prefix):
         binaries = ('dropbear', 'dropbearkey')
         license_file = 'LICENSE'
     else:
+        # Upstream links a PIE executable; ARM objects must use matching codegen.
+        cflags += ' -fPIE'
         checked_replace(source / 'builddefs.h', '#define VSF_BUILD_PAM', '#undef VSF_BUILD_PAM')
         checked_replace(source / 'sysdeputil.c', '#include "sysdeputil.h"', '#include "sysdeputil.h"\n#include "ec-password.h"')
         # Use upstream's Linux capability syscalls, avoiding a firmware libcap dependency.
