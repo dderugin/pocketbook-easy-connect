@@ -236,15 +236,55 @@ credentials if access should be narrower than full reader administration.
 `state_dir` may point to an existing suitable persistent directory discovered
 during device diagnostics. This version does not encrypt secrets at rest.
 
-## Next device milestones
+## TODO
 
-1. Run diagnostics under a normal app launch on PB632 firmware 6.11.2001.
-2. Build with the B288 SDK and check firmware ELF symbol/library compatibility.
-3. Verify SSH commands, PTY, both login methods and fingerprint persistence.
-4. Exercise Linux session cleanup, Wi-Fi loss, background, sleep/wake and USB mode.
-5. Verify current-user FTP transfers and permissions on the reader; test the
-   optional privileged/chroot mode separately.
-6. Add on-device public-key import, network lifecycle controls and bounded logs.
+### SDK, dependencies and release build
+
+- [ ] Obtain and pin a suitable PocketBook SDK; record the exact firmware versions
+  used for validation. Start with the current B288/softfp configuration and verify
+  compatibility before deciding whether separate platform profiles are needed.
+- [ ] Cross-compile all five executables on Linux with the real InkView headers
+  and library, and add an ARM build/package job to CI alongside the host tests.
+- [ ] Check each executable's ELF interpreter, CPU/float ABI, required libraries
+  and symbol versions against the target firmware, including libc and InkView.
+- [ ] Build a compatible ARM `libcrypto` for the controller and daemon adapters.
+  Link it statically or package it privately with the required runtime lookup
+  paths; the current ZIP does not bundle shared libraries.
+- [ ] Centralize platform flags shared by CMake and dependency builds. Replace
+  hardcoded PB632 release names/metadata with platform profiles and a documented
+  list of validated model/firmware combinations.
+
+### Verse Pro and InkPad 4
+
+Neither model has been validated with Easy Connect. Matching screen dimensions
+in host tests does not establish firmware or binary compatibility.
+
+| Model | Portrait resolution | Remaining UI validation |
+| --- | --- | --- |
+| Verse Pro (standard, non-Color) | 1072 × 1448 | Verify rendering, touch and keyboard on hardware; exact dimensions already appear in host scaling tests |
+| InkPad 4 | 1404 × 1872 | Add an exact-resolution host regression, then verify rendering, touch and keyboard on hardware |
+
+- [ ] Collect each model's exact firmware version and diagnostics from a normal
+  app launch; establish the launch account, permissions, storage paths and PTY
+  availability. Keep PB632 firmware U632.6.11.2001 as a baseline validation target.
+- [ ] Check portrait layout and touch alignment on both models. Validate rotation
+  behavior and decide whether to lock portrait orientation or support reflow.
+- [ ] Verify SSH commands, interactive PTY shells, key/password/either access,
+  credential rotation and host-key/fingerprint persistence across app restarts.
+- [ ] Verify password and anonymous FTP, passive transfers, file ownership and
+  current-user permissions. Test optional privileged/chroot mode separately.
+- [ ] Verify kernel supervision support and session cleanup: independent daemon
+  Stop, partial-start rollback, background/exit, and unexpected process death.
+- [ ] Exercise Wi-Fi loss/reconnection, sleep/wake, cover events and USB mode;
+  confirm the expected service state and cleanup after each transition.
+- [ ] Record results per model and firmware, including logs and unresolved issues,
+  before marking a release as supported on that combination.
+
+### Follow-up features
+
+- [ ] Add on-device SSH public-key import.
+- [ ] Add network lifecycle controls based on the device validation results.
+- [ ] Bound service log size and retention.
 
 ## Sources and license
 
