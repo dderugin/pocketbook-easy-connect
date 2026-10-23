@@ -6,6 +6,7 @@ option(EASY_CONNECT_POCKETBOOK "Build the InkView device interface" OFF)
 if(EASY_CONNECT_POCKETBOOK)
   # The package carries no shared libcrypto; use the SDK's ARM static archive.
   set(OPENSSL_USE_STATIC_LIBS TRUE)
+  set(CMAKE_SKIP_RPATH TRUE)
 endif()
 find_package(OpenSSL REQUIRED COMPONENTS Crypto)
 add_library(ec_core src/config.c src/doctor.c src/services.c src/credentials.c)

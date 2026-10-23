@@ -204,7 +204,7 @@ class PackageTests(unittest.TestCase):
         self.tool.ROOT = self.root
         for directory in ('src', 'adapters', 'tools', 'tests', 'data', 'build',
                           'work/stage/bin', 'work/stage/licenses/dropbear',
-                          'work/stage/licenses/vsftpd', 'work/downloads', 'state', 'data/licenses'):
+                          'work/stage/licenses/vsftpd', 'work/downloads', 'work/sdk', 'state', 'data/licenses'):
             (self.root / directory).mkdir(parents=True, exist_ok=True)
         for directory in ('src', 'adapters', 'tools', 'tests'):
             (self.root / directory / 'source.txt').write_text(directory + ' source')
@@ -212,6 +212,7 @@ class PackageTests(unittest.TestCase):
             (self.root / name).write_text(name)
         (self.root / 'sdk.json').write_text(json.dumps({'name': 'test-sdk', 'sha256': 'test'}))
         (self.root / 'data/licenses/openssl.txt').write_text('OpenSSL license')
+        (self.root / 'work/sdk/SDK-B288-6.10.7z').write_bytes(b'SDK ARCHIVE MUST NOT SHIP')
         (self.root / 'data/EasyConnect.app').write_text('#!/bin/sh\nexec application\n')
         (self.root / 'data/easy-connect.conf.example').write_text('auth=key\n')
         for name in ('host_ed25519', 'password.hash', 'ftp-password.hash', 'authorized_keys'):
@@ -259,6 +260,7 @@ class PackageTests(unittest.TestCase):
                 self.assertEqual((archive.getinfo(path).external_attr >> 16) & 0o777, 0o755)
             for path in names:
                 self.assertFalse(path.startswith('/') or '..' in Path(path).parts)
+                self.assertNotIn(b'SDK ARCHIVE MUST NOT SHIP', archive.read(path))
                 self.assertNotIn(b'LIVE SECRET MUST NOT SHIP', archive.read(path))
                 self.assertNotIn(b'LIVE SETTINGS MUST NOT SHIP', archive.read(path))
             self.assertFalse(any('/state/' in path or path.endswith('/easy-connect.conf') for path in names))

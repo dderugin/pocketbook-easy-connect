@@ -22,6 +22,7 @@ report="$root/build-device/arm-report.txt"
 for binary in "$root/build-device/easy-connect" "$root/build-device/easy-connect.app" \
               "$root/work/stage/bin/dropbear" "$root/work/stage/bin/dropbearkey" \
               "$root/work/stage/bin/vsftpd"; do
+    printf '\nFile: %s\n' "$(basename "$binary")" >> "$report"
     "$readelf" --file-header --program-headers --dynamic --arch-specific \
         --version-info --wide "$binary" >> "$report"
     if "$readelf" --dynamic "$binary" | grep -Eq 'NEEDED.*lib(crypto|ssl)\.'; then
