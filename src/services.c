@@ -89,13 +89,21 @@ static int hostkey(ec_config *c) {
 static int available(ec_config *c,unsigned port) {
     int fd=socket(AF_INET,SOCK_STREAM,0),rc;
     if (fd<0) return ec_error("socket: %s",strerror(errno));
+    /* Match the daemons: closed connections must not prevent a restart. */
+    int reuse=1;
+    if (setsockopt(fd,SOL_SOCKET,SO_REUSEADDR,&reuse,sizeof reuse)) {
+        int error=errno;
+        close(fd);
+        return ec_error("set socket reuse: %s",strerror(error));
+    }
     struct sockaddr_in addr;
     memset(&addr,0,sizeof addr);
     addr.sin_family=AF_INET; addr.sin_port=htons((unsigned short)port);
     inet_pton(AF_INET,c->bind_address,&addr.sin_addr);
     rc=bind(fd,(struct sockaddr *)&addr,sizeof addr);
+    int error=errno;
     close(fd);
-    return rc ? ec_error("cannot bind %s:%u: %s",c->bind_address,port,strerror(errno)) : 0;
+    return rc ? ec_error("cannot bind %s:%u: %s",c->bind_address,port,strerror(error)) : 0;
 }
 static int listening(ec_config *c,unsigned port) {
     int fd=socket(AF_INET,SOCK_STREAM,0);

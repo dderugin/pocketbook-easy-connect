@@ -131,6 +131,32 @@ class SSHTests(unittest.TestCase):
         with socket.socket() as sock:
             self.assertNotEqual(sock.connect_ex(('127.0.0.1', self.port)), 0)
 
+    def test_start_with_connection_in_time_wait(self):
+        # Close the server side first so Linux retains TIME_WAIT on our port.
+        with socket.socket() as listener, socket.socket() as client:
+            listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            listener.bind(('127.0.0.1', self.port))
+            listener.listen(1)
+            client.settimeout(5)
+            client.connect(('127.0.0.1', self.port))
+            accepted, _ = listener.accept()
+            accepted.close()
+            self.assertEqual(client.recv(1), b'')
+        with self.server('key'):
+            self.assert_ssh_ok()
+
+    def test_occupied_port_rejected(self):
+        with socket.socket() as listener:
+            listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            listener.bind(('127.0.0.1', self.port))
+            listener.listen(1)
+            (self.root / 'easy-connect.conf').write_text(
+                f'auth=key\nbind_address=127.0.0.1\nssh_port={self.port}\n')
+            result = subprocess.run([str(BINARY), '--root', str(self.root), 'serve', 'ssh'],
+                                    capture_output=True, text=True, timeout=5)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(f'cannot bind 127.0.0.1:{self.port}', result.stderr)
+
     def test_corrupt_password_never_falls_back(self):
         (self.root / 'state/password.hash').write_text('invalid verifier\n')
         with self.server('password'):
