@@ -168,5 +168,73 @@ class FTPTests(unittest.TestCase):
             with self.assertRaises(ftplib.error_perm):
                 with self.client(): self.fail('Named login accepted in anonymous-only mode')
 
+    def test_passive_data_port_matches_configured_range(self):
+        with self.server(), self.client() as ftp:
+            host, port = ftp.makepasv()
+            self.assertEqual(host, '127.0.0.1')
+            self.assertEqual(port, self.data_port)
+            ftp.storbinary('STOR passive.txt', io.BytesIO(b'passive transfer'))
+            self.assertEqual((self.share / 'passive.txt').read_bytes(), b'passive transfer')
+
+    def test_missing_empty_and_symlinked_password_fail_before_listening(self):
+        path = self.root / 'state/ftp-password.hash'
+        original = path.read_bytes()
+        victim = Path(self.temp.name) / 'verifier'
+        victim.write_bytes(original)
+        for kind in ('missing', 'empty', 'symlink'):
+            with self.subTest(kind=kind):
+                path.unlink(missing_ok=True)
+                if kind == 'empty': path.touch()
+                if kind == 'symlink': path.symlink_to(victim)
+                result = subprocess.run([str(BINARY), '--root', str(self.root), 'serve', 'ftp'],
+                                        capture_output=True, text=True, timeout=10)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertNotIn('ftp listening on', result.stdout)
+                self.assertEqual(victim.read_bytes(), original)
+
+    def test_missing_and_symlinked_starting_folder_are_rejected(self):
+        link = Path(self.temp.name) / 'share-link'
+        link.symlink_to(self.share, target_is_directory=True)
+        for path in (Path(self.temp.name) / 'missing', link):
+            with self.subTest(path=path):
+                (self.root / 'easy-connect.conf').write_text(
+                    self.config.replace(f'ftp_root={self.share}', f'ftp_root={path}'))
+                result = subprocess.run([str(BINARY), '--root', str(self.root), 'serve', 'ftp'],
+                                        capture_output=True, text=True, timeout=10)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn('FTP root must be an existing directory', result.stderr)
+
+    def test_unicode_password_authentication(self):
+        password = 'отдельный пароль для FTP'
+        subprocess.run([sys.executable, str(ROOT / 'tools/set-password.py'),
+                        str(self.root / 'state'), '--service', 'ftp', '--stdin'],
+                       input=password + '\n', text=True, capture_output=True, check=True)
+        # ftplib defaults to UTF-8, matching the password provisioning tool.
+        with self.server(), self.client(password=password) as ftp:
+            self.assertEqual(Path(ftp.pwd()).resolve(), self.share.resolve())
+
+    def test_anonymous_access_obeys_current_user_file_permissions(self):
+        path = self.share / 'private'
+        path.write_bytes(b'private contents')
+        path.chmod(0)
+        (self.root / 'easy-connect.conf').write_text(self.config + 'ftp_auth=anonymous\n')
+        try:
+            with self.server(), self.client('anonymous', 'unused') as ftp:
+                with self.assertRaises(ftplib.error_perm):
+                    ftp.retrbinary('RETR private', lambda chunk: self.fail('Unreadable contents exposed'))
+        finally:
+            path.chmod(0o600)
+
+    @unittest.skipUnless(sys.platform.startswith('linux'), 'session descendant cleanup requires Linux')
+    def test_stop_closes_authenticated_session_and_port_can_restart(self):
+        with self.server() as process, self.client() as ftp:
+            ftp.storbinary('STOR before-stop', io.BytesIO(b'persisted'))
+            process.terminate()
+            process.wait(timeout=10)
+            with self.assertRaises((EOFError, OSError, ftplib.Error)):
+                ftp.pwd()
+        with self.server(), self.client() as ftp:
+            self.assertIn('before-stop', ftp.nlst())
+
 if __name__=='__main__':
     unittest.main()

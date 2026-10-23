@@ -40,7 +40,7 @@ static int ec_password_matches(const char *password,size_t length) {
     }
     n=read(fd,record,sizeof record-1);
     close(fd);
-    if (n!=st.st_size) return 0;
+    if (n!=st.st_size || memchr(record,0,(size_t)n)) return 0;
     record[n]=0;
     if (sscanf(record,"%3[^$]$%d$%32[^$]$%64s %c",version,&iterations,salt_hex,hash_hex,&extra)!=4 ||
         strcmp(version,"ec1") || iterations<210000 || iterations>1000000 ||

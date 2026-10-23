@@ -57,6 +57,10 @@ Linux and macOS support controller, SSH and FTP development tests. The macOS
 vsftpd build disables unavailable wtmp logging and Linux-style address-space caps;
 these compatibility changes do not apply to the Linux/ARM build.
 Tests listen only on loopback and use disposable keys and credentials.
+CTest includes controller, core filesystem/credential, UI, and offline packaging
+and dependency tests. The integration commands above exercise real daemons and
+independent service lifecycles. See [the test coverage matrix](tests/README.md)
+for covered behavior and the remaining SDK/device validation gaps.
 
 ## Build for the reader
 

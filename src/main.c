@@ -10,7 +10,7 @@ int main(int argc,char **argv) {
     umask(0077);
     const char *root="/mnt/ext1/system/share/easy-connect";
     int at=1;
-    if (argc>3 && !strcmp(argv[1],"--root")) { root=argv[2]; at=3; }
+    if (argc>2 && !strcmp(argv[1],"--root")) { root=argv[2]; at=3; }
     if (argc<=at) {
         fprintf(stderr,"Usage: easy-connect [--root DIRECTORY] doctor|fingerprint|serve ssh|ftp|both\n");
         return 2;

@@ -36,9 +36,12 @@ class SSHTests(unittest.TestCase):
         self.password = 'integration test password'
         subprocess.run([sys.executable, str(ROOT / 'tools/set-password.py'), str(self.root / 'state'), '--stdin'],
                        input=self.password+'\n', text=True, check=True, capture_output=True)
-        with socket.socket() as sock:
-            sock.bind(('127.0.0.1', 0))
-            self.port = sock.getsockname()[1]
+        while True:
+            with socket.socket() as sock:
+                sock.bind(('127.0.0.1', 0))
+                self.port = sock.getsockname()[1]
+            if self.port != 2121 and not 50000 <= self.port <= 50009:
+                break
         self.askpass = Path(self.temp.name) / 'askpass'
         self.askpass.write_text('#!/bin/sh\nprintf "%s\\n" "$EC_TEST_PASSWORD"\n')
         self.askpass.chmod(0o700)
@@ -117,10 +120,15 @@ class SSHTests(unittest.TestCase):
     def test_key_revocation_after_restart(self):
         with self.server('key'):
             self.assert_ssh_ok()
-        subprocess.run(['ssh-keygen', '-q', '-t', 'ed25519', '-N', '', '-f', str(self.key)+'-replacement'], check=True)
-        shutil.copy2(Path(str(self.key)+'-replacement.pub'), self.root / 'state/authorized_keys')
+            replacement = Path(str(self.key) + '-replacement')
+            subprocess.run(['ssh-keygen', '-q', '-t', 'ed25519', '-N', '', '-f', str(replacement)], check=True)
+            shutil.copy2(replacement.with_suffix('.pub'), self.root / 'state/authorized_keys')
+            # Running sessions use the staged key list until an explicit restart.
+            self.assert_ssh_ok()
         with self.server('key'):
             self.assertNotEqual(self.ssh().returncode, 0)
+            self.key = replacement
+            self.assert_ssh_ok()
 
     def test_duplicate_start_and_port_released(self):
         with self.server('key'):
@@ -186,6 +194,68 @@ class SSHTests(unittest.TestCase):
         result = subprocess.run([str(BINARY), '--root', str(self.root), 'serve', 'ssh'],
                                 capture_output=True, text=True, timeout=10)
         self.assertNotEqual(result.returncode, 0)
+
+    def test_missing_and_empty_credentials_fail_before_listening(self):
+        for auth, name in (('key', 'authorized_keys'), ('password', 'password.hash'),
+                           ('both', 'authorized_keys'), ('both', 'password.hash')):
+            path = self.root / 'state' / name
+            original = path.read_bytes()
+            for missing in (True, False):
+                with self.subTest(auth=auth, name=name, missing=missing):
+                    if missing:
+                        path.unlink()
+                    else:
+                        path.write_bytes(b'')
+                    (self.root / 'easy-connect.conf').write_text(
+                        f'auth={auth}\nbind_address=127.0.0.1\nssh_port={self.port}\n')
+                    result = subprocess.run([str(BINARY), '--root', str(self.root), 'serve', 'ssh'],
+                                            capture_output=True, text=True, timeout=10)
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertNotIn('ssh listening on', result.stdout)
+                    with socket.socket() as probe:
+                        self.assertNotEqual(probe.connect_ex(('127.0.0.1', self.port)), 0)
+                    path.write_bytes(original)
+
+    def test_symlinked_host_key_is_not_followed_or_overwritten(self):
+        victim = Path(self.temp.name) / 'victim'
+        victim.write_bytes(b'must not overwrite host key')
+        (self.root / 'state/host_ed25519').symlink_to(victim)
+        (self.root / 'easy-connect.conf').write_text(
+            f'bind_address=127.0.0.1\nssh_port={self.port}\n')
+        result = subprocess.run([str(BINARY), '--root', str(self.root), 'serve', 'ssh'],
+                                capture_output=True, text=True, timeout=10)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(victim.read_bytes(), b'must not overwrite host key')
+
+    def test_fingerprint_matches_host_key_presented_to_openssh(self):
+        with self.server('key'):
+            scan = subprocess.run(['ssh-keyscan', '-T', '3', '-p', str(self.port), '-t', 'ed25519', '127.0.0.1'],
+                                  capture_output=True, text=True, timeout=10)
+            self.assertEqual(scan.returncode, 0, scan.stderr)
+            fingerprint = subprocess.run(['ssh-keygen', '-lf', '-'], input=scan.stdout,
+                                        capture_output=True, text=True, timeout=5)
+            self.assertEqual(fingerprint.returncode, 0, fingerprint.stderr)
+            expected = fingerprint.stdout.split()[1]
+            result = subprocess.run([str(BINARY), '--root', str(self.root), 'fingerprint'],
+                                    capture_output=True, text=True, timeout=5)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn(expected, result.stdout)
+
+    def test_unknown_account_cannot_use_valid_key(self):
+        with self.server('key'):
+            args, env = self.ssh_command()
+            args[-2] = 'easy-connect-nonexistent-user@127.0.0.1'
+            result = subprocess.run(args, stdin=subprocess.DEVNULL, capture_output=True,
+                                    text=True, env=env, timeout=10)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertNotIn('easy-connect-ok', result.stdout)
+
+    def test_unicode_password_authentication(self):
+        password = 'пароль для моей книги'
+        subprocess.run([sys.executable, str(ROOT / 'tools/set-password.py'), str(self.root / 'state'), '--stdin'],
+                       input=password + '\n', text=True, capture_output=True, check=True)
+        with self.server('password'):
+            self.assert_ssh_ok('password', password=password)
 
     @unittest.skipUnless(sys.platform.startswith('linux'), 'subreaper cleanup requires Linux')
     def test_active_session_terminated_on_controller_stop(self):
