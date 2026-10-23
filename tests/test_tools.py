@@ -127,6 +127,73 @@ class DependencyTests(unittest.TestCase):
         self.assertEqual(path.read_bytes(), expected)
 
 
+class SdkTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(prefix='easy-connect-sdk-')
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.tool = load_tool('sdk')
+        self.tool.ROOT = self.root
+        self.payload = b'verified SDK archive contents'
+        self.tool.LOCK = {'url': 'https://example.invalid/sdk.7z',
+                          'sha256': hashlib.sha256(self.payload).hexdigest()}
+        self.path = self.root / 'work/sdk/sdk.7z'
+        # Small blocks ensure streaming and checksum tests cross chunk boundaries.
+        self.tool.CHUNK_SIZE = 4
+
+    def test_download_streams_verified_bytes_and_cleans_temporary_files(self):
+        with mock.patch.object(self.tool, 'urlopen', return_value=io.BytesIO(self.payload)):
+            self.assertEqual(self.tool.fetch(self.path), self.path)
+        self.assertEqual(self.path.read_bytes(), self.payload)
+        self.assertEqual(list(self.path.parent.iterdir()), [self.path])
+
+    def test_verified_cache_never_uses_network(self):
+        self.path.parent.mkdir(parents=True)
+        self.path.write_bytes(self.payload)
+        with mock.patch.object(self.tool, 'urlopen', side_effect=AssertionError('network')):
+            self.tool.fetch(self.path)
+            self.tool.verify(self.path)
+
+    def test_corrupt_cache_is_preserved_and_never_silently_redownloaded(self):
+        self.path.parent.mkdir(parents=True)
+        self.path.write_bytes(b'tampered')
+        with mock.patch.object(self.tool, 'urlopen', side_effect=AssertionError('network')):
+            with self.assertRaisesRegex(RuntimeError, 'checksum mismatch'):
+                self.tool.fetch(self.path)
+        self.assertEqual(self.path.read_bytes(), b'tampered')
+
+    def test_unverified_download_is_not_published(self):
+        with mock.patch.object(self.tool, 'urlopen', return_value=io.BytesIO(b'tampered')):
+            with self.assertRaisesRegex(RuntimeError, 'checksum mismatch'):
+                self.tool.fetch(self.path)
+        self.assertEqual(list(self.path.parent.iterdir()), [])
+
+    def test_interrupted_download_cleans_partial_archive(self):
+        response = mock.MagicMock()
+        response.__enter__.return_value = response
+        response.read.side_effect = [b'partial', OSError('connection lost')]
+        with mock.patch.object(self.tool, 'urlopen', return_value=response):
+            with self.assertRaisesRegex(OSError, 'connection lost'):
+                self.tool.fetch(self.path)
+        self.assertEqual(list(self.path.parent.iterdir()), [])
+
+    def test_offline_verify_requires_existing_archive(self):
+        with mock.patch.object(self.tool, 'urlopen', side_effect=AssertionError('network')):
+            with self.assertRaises(FileNotFoundError):
+                self.tool.verify(self.path)
+
+    def test_cli_default_cache_and_archive_override(self):
+        with mock.patch.object(sys, 'argv', ['sdk.py', 'fetch']), \
+             mock.patch.object(self.tool, 'urlopen', return_value=io.BytesIO(self.payload)):
+            self.tool.main()
+        self.assertEqual(self.path.read_bytes(), self.payload)
+        alternate = self.root / 'alternate.7z'
+        alternate.write_bytes(self.payload)
+        with mock.patch.object(sys, 'argv', ['sdk.py', 'verify', '--archive', str(alternate)]), \
+             mock.patch.object(self.tool, 'urlopen', side_effect=AssertionError('network')):
+            self.tool.main()
+
+
 class PackageTests(unittest.TestCase):
     """Minimal ELF headers test packaging policy, not ARM executability."""
     def setUp(self):
@@ -137,12 +204,14 @@ class PackageTests(unittest.TestCase):
         self.tool.ROOT = self.root
         for directory in ('src', 'adapters', 'tools', 'tests', 'data', 'build',
                           'work/stage/bin', 'work/stage/licenses/dropbear',
-                          'work/stage/licenses/vsftpd', 'work/downloads', 'state'):
+                          'work/stage/licenses/vsftpd', 'work/downloads', 'state', 'data/licenses'):
             (self.root / directory).mkdir(parents=True, exist_ok=True)
         for directory in ('src', 'adapters', 'tools', 'tests'):
             (self.root / directory / 'source.txt').write_text(directory + ' source')
         for name in ('README.md', 'LICENSE', 'CMakeLists.txt'):
             (self.root / name).write_text(name)
+        (self.root / 'sdk.json').write_text(json.dumps({'name': 'test-sdk', 'sha256': 'test'}))
+        (self.root / 'data/licenses/openssl.txt').write_text('OpenSSL license')
         (self.root / 'data/EasyConnect.app').write_text('#!/bin/sh\nexec application\n')
         (self.root / 'data/easy-connect.conf.example').write_text('auth=key\n')
         for name in ('host_ed25519', 'password.hash', 'ftp-password.hash', 'authorized_keys'):
@@ -179,7 +248,8 @@ class PackageTests(unittest.TestCase):
             names = set(archive.namelist())
             for name in self.binaries:
                 self.assertIn(prefix + 'bin/' + name, names)
-            for path in ('licenses/dropbear/LICENSE', 'licenses/vsftpd/COPYING',
+            for path in ('licenses/dropbear/LICENSE', 'licenses/vsftpd/COPYING', 'licenses/openssl/openssl.txt',
+                         'source/sdk.json',
                          'source/src/source.txt', 'source/adapters/source.txt',
                          'source/tools/source.txt', 'source/tests/source.txt',
                          'source/CMakeLists.txt', 'source/work/downloads/dropbear.tar.gz',
@@ -198,6 +268,7 @@ class PackageTests(unittest.TestCase):
         with zipfile.ZipFile(self.zip) as archive:
             info = json.loads(archive.read('system/share/easy-connect/build-info.json'))
         self.assertEqual(info['device_validation'], 'not-performed')
+        self.assertEqual(info['sdk'], json.loads((self.root / 'sdk.json').read_text()))
         self.assertEqual(info['dependencies'], json.loads((self.root / 'dependencies.json').read_text()))
         self.assertEqual(info['binaries'], {name: hashlib.sha256(path.read_bytes()).hexdigest()
                                             for name, path in self.binaries.items()})

@@ -1,0 +1,12 @@
+{
+  "name": "SDK-B288-6.10",
+  "version": "6.10",
+  "platform": "B288",
+  "url": "https://github.com/Sean-on-Git/PocketBook-SDK/releases/download/6.10/SDK-B288-6.10.7z",
+  "sha256": "18405fb276535d53a4b70d2bbf4033313cded58da5002d563ccf7e1838440c0b",
+  "source": "https://github.com/Sean-on-Git/PocketBook-SDK/releases/tag/6.10",
+  "provenance": "Community mirror; release asset checksum supplied by GitHub",
+  "host": "Linux x86_64",
+  "target": "arm-obreey-linux-gnueabi",
+  "openssl": "3.4.1"
+}

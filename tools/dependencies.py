@@ -50,6 +50,7 @@ def build(name, sdk, prefix):
     cppflags = env.get('CPPFLAGS', '')
     ldflags = env.get('LDFLAGS', '')
     cflags = '-O2 -g'
+    crypto_libraries = '-lcrypto'
     configure = []
     if sdk:
         if os.uname().sysname != 'Linux':
@@ -59,6 +60,10 @@ def build(name, sdk, prefix):
         sysroot = sdk / 'usr/arm-obreey-linux-gnueabi/sysroot'
         if not cc.is_file():
             raise RuntimeError(f'Missing SDK compiler: {cc}')
+        crypto = sysroot / 'usr/lib/libcrypto.a'
+        if not crypto.is_file():
+            raise RuntimeError(f'Missing SDK static OpenSSL library: {crypto}')
+        crypto_libraries = f'{crypto} -ldl -pthread'
         env['CC'] = str(cc)
         env['AR'] = str(sdk / 'usr/bin/arm-obreey-linux-gnueabi-ar')
         env['RANLIB'] = str(sdk / 'usr/bin/arm-obreey-linux-gnueabi-ranlib')
@@ -100,7 +105,7 @@ def build(name, sdk, prefix):
         if not sdk and os.uname().sysname == 'Darwin':
             with (source / 'localoptions.h').open('a') as options:
                 options.write('#define DROPBEAR_SVR_DROP_PRIVS 0\n')
-        env['LIBS'] = '-lcrypto'
+        env['LIBS'] = crypto_libraries
         subprocess.run([str(source / 'configure'), *configure, '--disable-zlib', '--disable-pam',
                         '--disable-lastlog', '--disable-utmp', '--disable-utmpx',
                         '--disable-wtmp', '--disable-wtmpx'], cwd=source, env=env, check=True)
@@ -166,7 +171,7 @@ def build(name, sdk, prefix):
                             '#if defined(RLIMIT_AS) && !defined(__APPLE__)')
         # Override the upstream host-probing linker helper for cross compilation.
         # The app-specific adapter removes the only crypt() calls.
-        libraries = '-lcrypto'
+        libraries = crypto_libraries
         link = ldflags + ('' if os.uname().sysname == 'Darwin' and not sdk else ' -Wl,-s')
         make = ['make', f'-j{os.cpu_count() or 2}', f'CC={env.get("CC", "cc")}',
                 f'CFLAGS={cflags} {cppflags}', f'LINK={link}', f'LIBS={libraries}']

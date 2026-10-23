@@ -15,7 +15,7 @@ passwords, files and application roots are disposable fixtures.
 | `test_ssh.py` | Real OpenSSH/Dropbear: key/password/either access and rejection, unknown account, Unicode passwords, required credentials, host-key persistence and symlink rejection, fingerprint independently checked by OpenSSH, revocation/reset on restart, duplicate start, occupied ports, TIME_WAIT reuse, active-session termination |
 | `test_ftp.py` | Real vsftpd/ftplib: named/anonymous authentication and rejection, passive port range, uploads/downloads/listing/rename/delete/directories, Unicode filenames/passwords, ownership and file permissions, starting directory without chroot, invalid credential/folder sources, disabled active mode, session close and restart |
 | `test_sessions.py` | Actual UI callbacks with both real daemons: independent stop, running-setting locks, password setup, failed-start recovery, background/hide/exit cleanup, repeat button actions, partial `serve both` rollback, listener crash/status refresh, abrupt parent death and active-session cleanup |
-| `test_tools.py` | Offline dependency cache/checksum and safe archive extraction, exact patch anchors, release layout and executable modes, all five ARM-header requirements, missing licenses/binaries, source/archive inclusion, manifest/checksum correctness, credential exclusion and stale staging cleanup |
+| `test_tools.py` | Offline SDK streaming download, cache/checksum verification and interrupted-download cleanup; dependency cache/checksum and safe archive extraction, exact patch anchors, release layout and executable modes, all five ARM-header requirements, missing licenses/binaries, source/archive inclusion, manifest/checksum correctness, credential exclusion and stale staging cleanup |
 
 The core driver and InkView stub are host-test executables, excluded from the
 device build. Release fixtures use synthetic ELF headers to check packaging
@@ -24,7 +24,9 @@ downloads and use small local archives; real dependency builds and daemon tests
 run separately in CI.
 
 Linux CI runs all suites, including process ancestry and session cleanup tests.
-macOS skips Linux-only supervision checks. These suites do not validate the B288
-cross compiler, firmware library compatibility, physical InkView rendering,
+macOS skips Linux-only supervision checks. The separate B288 ARM build workflow
+uses the pinned SDK to compile/package all five executables and records their
+ELF runtime requirements. It does not execute them on a reader. These suites do
+not validate firmware library compatibility, physical InkView rendering,
 Wi-Fi/suspend/USB behavior, or device-specific privilege behavior. Those still
 require the SDK and a PocketBook reader.

@@ -22,8 +22,8 @@ B288 / Cortex-A7 softfp SDK target and USB installation layout.
 - Separate device build/package scripts, checksummed source dependencies, and
   automated controller/real SSH integration tests.
 
-The InkView target and ARM dependency linking still need testing with the B288 SDK
-and physical reader. Normal PocketBook app privileges are unknown until the
+The Linux ARM build uses the real B288 SDK in CI; physical-reader validation
+remains pending. Normal PocketBook app privileges are unknown until the
 diagnostic app is run. SSH and FTP transfers are tested locally as a normal user;
 physical-reader verification is pending. No root or jailbreak is needed for FTP.
 
@@ -64,21 +64,47 @@ for covered behavior and the remaining SDK/device validation gaps.
 
 ## Build for the reader
 
-Use a Linux build host and **SDK-B288-6.10**, matching the CoolReader project.
-The SDK must provide compatible OpenSSL headers/libraries and InkView.
-The ARM target has not been built in this development environment.
+Use a **Linux x86_64** build host and SDK-B288-6.10. The SDK is pinned separately
+in [sdk.json](sdk.json), including its URL and SHA-256. It comes from the
+[Sean-on-Git community mirror](https://github.com/Sean-on-Git/PocketBook-SDK/releases/tag/6.10),
+which is also cited by [KOReader's InkView collection](https://github.com/koreader/pocketbook-inkview).
+This is not an official successor repository. SDK 6.11 from that mirror targets
+RK3566 and is not the default for this B288 build.
+
+On Ubuntu 24.04:
 
 ```sh
+sudo apt-get install build-essential cmake python3 libarchive-tools
+
+# Explicit network steps; a cached SDK is always checked again before use.
+python3 tools/sdk.py fetch
 python3 tools/dependencies.py fetch
-export POCKETBOOK_SDK=/absolute/path/to/SDK-B288-6.10
+bsdtar -xf work/sdk/SDK-B288-6.10.7z -C work/sdk
 bash tools/build-device.sh
 ```
 
-The build creates `dist/easy-connect-pb632-0.1.0.zip` and a SHA-256 checksum.
-Packaging rejects host binaries and requires all five ARM executables. The ZIP
-includes licenses, complete corresponding source and the pinned upstream archives.
-Inspect required ELF libraries against the firmware runtime before device installation;
-an ARM ELF header alone does not establish firmware compatibility.
+The SDK download is about 613 MiB. Downloads stream to a temporary file and enter
+the cache only after checksum verification. `python3 tools/sdk.py verify` checks
+an existing download offline. Keep SDK symlinks intact when extracting; use
+`bsdtar` as above. The build defaults to `work/sdk/SDK-B288-6.10`; set
+`POCKETBOOK_SDK=/absolute/path/to/SDK-B288-6.10` to use an existing installation.
+Build commands never download the SDK automatically. The SDK's Linux binaries
+cannot run natively on macOS; use Linux or the GitHub Actions ARM build.
+
+The controller and daemon adapters link the SDK's ARM OpenSSL crypto archive
+statically (OpenSSL 3.4.1, with its license notice included). InkView headers and
+its link library are located inside the SDK sysroot; the reader supplies InkView at runtime. The build rejects an unexpected
+shared OpenSSL dependency and writes ELF headers, interpreter, dependencies,
+ARM attributes and symbol versions to `build-device/arm-report.txt`.
+
+The build creates `dist/easy-connect-pb632-0.1.0.zip` and its SHA-256 checksum.
+The **B288 ARM build** workflow performs the same build and uploads a development
+artifact. Packaging requires all five ARM executables and includes licenses,
+complete application/daemon sources, pinned daemon archives and SDK metadata.
+The SDK archive itself is excluded from the ZIP.
+
+Compare `arm-report.txt` with the actual firmware before installation. A successful
+cross build does not establish firmware compatibility or physical-reader support.
 
 ## Install and configure
 
@@ -240,16 +266,14 @@ during device diagnostics. This version does not encrypt secrets at rest.
 
 ### SDK, dependencies and release build
 
-- [ ] Obtain and pin a suitable PocketBook SDK; record the exact firmware versions
-  used for validation. Start with the current B288/softfp configuration and verify
-  compatibility before deciding whether separate platform profiles are needed.
-- [ ] Cross-compile all five executables on Linux with the real InkView headers
-  and library, and add an ARM build/package job to CI alongside the host tests.
+- [x] Pin the B288 6.10 SDK archive and checksum, with an explicit verified download.
+- [x] Add a Linux ARM build/package job using real InkView headers and libraries.
+- [ ] Record the exact firmware versions used for validation. Verify the B288/softfp
+  configuration before deciding whether separate platform profiles are needed.
 - [ ] Check each executable's ELF interpreter, CPU/float ABI, required libraries
   and symbol versions against the target firmware, including libc and InkView.
-- [ ] Build a compatible ARM `libcrypto` for the controller and daemon adapters.
-  Link it statically or package it privately with the required runtime lookup
-  paths; the current ZIP does not bundle shared libraries.
+- [x] Link the SDK's static ARM `libcrypto` into the controller and daemon adapters;
+  reject shared OpenSSL dependencies during the device build.
 - [ ] Centralize platform flags shared by CMake and dependency builds. Replace
   hardcoded PB632 release names/metadata with platform profiles and a documented
   list of validated model/firmware combinations.

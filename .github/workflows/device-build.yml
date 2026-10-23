@@ -1,0 +1,32 @@
+name: B288 ARM build
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  b288:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build tools
+        run: sudo apt-get update && sudo apt-get install -y build-essential cmake python3 libarchive-tools
+      - uses: actions/cache@v4
+        with:
+          path: work/sdk/SDK-B288-6.10.7z
+          key: b288-sdk-${{ hashFiles('sdk.json') }}
+      - name: Verify SDK archive
+        run: python3 tools/sdk.py fetch
+      - name: Extract SDK with Unix symlinks
+        run: |
+          bsdtar -xf work/sdk/SDK-B288-6.10.7z -C work/sdk
+      - name: Fetch daemon sources
+        run: python3 tools/dependencies.py fetch
+      - name: Cross-compile and package
+        run: bash tools/build-device.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: easy-connect-b288-development
+          path: |
+            dist/*.zip
+            dist/*.sha256
+            build-device/arm-report.txt
+          if-no-files-found: error

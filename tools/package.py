@@ -38,13 +38,14 @@ def main():
     shutil.copy2(ROOT / 'LICENSE', share)
     shutil.copy2(ROOT / 'dependencies.json', share)
     shutil.copytree(ROOT / 'work/stage/licenses', share / 'licenses')
+    shutil.copytree(ROOT / 'data/licenses', share / 'licenses/openssl')
     # Distribute complete corresponding source, including upstream archives.
     source = share / 'source'
     source.mkdir()
     for directory in ('src', 'adapters', 'tools', 'data', 'tests'):
         shutil.copytree(ROOT / directory, source / directory,
                         ignore=shutil.ignore_patterns('__pycache__'))
-    for name in ('CMakeLists.txt', 'dependencies.json', 'LICENSE', 'README.md'):
+    for name in ('CMakeLists.txt', 'dependencies.json', 'sdk.json', 'LICENSE', 'README.md'):
         shutil.copy2(ROOT / name, source / name)
     downloads = source / 'work/downloads'
     downloads.mkdir(parents=True)
@@ -57,6 +58,7 @@ def main():
     manifest = {'application':'Easy Connect','version':'0.1.0',
                 'target':'PocketBook PB632 / U632.6.11.2001',
                 'device_validation':'not-performed',
+                'sdk':json.loads((ROOT / 'sdk.json').read_text()),
                 'binaries':{name:hashlib.sha256(path.read_bytes()).hexdigest() for name,path in binaries.items()},
                 'dependencies':json.loads((ROOT / 'dependencies.json').read_text())}
     (share / 'build-info.json').write_text(json.dumps(manifest,indent=2)+'\n')
