@@ -48,7 +48,8 @@ class SessionTests(unittest.TestCase):
         self.err=tempfile.TemporaryFile(mode='w+t')
         self.addCleanup(self.err.close)
         self.process=subprocess.Popen([str(BINARY)],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=self.err,
-            text=True,bufsize=1,env=dict(os.environ,EC_UI_ROOT=str(self.root),EC_UI_EVENTS='-'))
+            text=True,bufsize=1,env=dict(os.environ,EC_UI_ROOT=str(self.root),EC_UI_EVENTS='-',
+                                      EC_UI_SCANNER=str(self.root/'scanner.app'), EC_UI_HELPER='1'))
         self.pending=b''
         self.addCleanup(self.close_ui)
 
@@ -70,6 +71,8 @@ class SessionTests(unittest.TestCase):
         if self.process.poll() is None:
             self.process.wait(timeout=10)
         self.process.stdout.close()
+        self.err.seek(0)
+        self.assertNotIn('InkView helper was killed or reaped', self.err.read())
 
     def tab(self,tab): self.command('press ' + tab + '-tab')
     def start(self,tab): self.tab(tab); self.command('press start')
@@ -117,6 +120,70 @@ class SessionTests(unittest.TestCase):
         self.stop('ftp'); self.assert_closed(self.ftp_port); self.ssh()
         self.stop('ssh'); self.assert_closed(self.ssh_port)
 
+    def prepare_scanner(self):
+        scanner = self.root / 'scanner.app'
+        scanner.write_text(f'#!{sys.executable}\nimport time\nfrom pathlib import Path\n'
+            f'while not Path({str(self.root / "finish-scan")!r}).exists(): time.sleep(.02)\n'
+            'print("Scan finished", flush=True)\ntime.sleep(60)\n')
+        scanner.chmod(0o755)
+
+    def test_library_refresh_preserves_active_ssh_and_ftp_through_scanner_background(self):
+        self.prepare_scanner()
+        self.start('ssh'); self.start('ftp')
+        user = pwd.getpwuid(os.geteuid()).pw_name
+        client = subprocess.Popen(['ssh', '-F', '/dev/null', '-p', str(self.ssh_port),
+            '-i', str(self.key), '-o', 'IdentityAgent=none', '-o', 'IdentitiesOnly=yes',
+            '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=no',
+            '-o', f'UserKnownHostsFile={self.root}/known_hosts', f'{user}@127.0.0.1', 'exec cat'],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        def round_trip(line):
+            client.stdin.write(line + '\n'); client.stdin.flush()
+            ready, _, _ = select.select([client.stdout], [], [], 5)
+            self.assertTrue(ready, 'existing SSH session stopped responding')
+            self.assertEqual(client.stdout.readline(), line + '\n')
+        try:
+            round_trip('before refresh')
+            with self.ftp() as ftp:
+                with ftp.transfercmd('STOR still-connected.txt') as data:
+                    data.sendall(b'before refresh\n')
+                    self.command('press refresh-library')
+                    self.assertIn('Refreshing library', self.ui_text())
+                    self.command('background'); self.command('hide')
+                    round_trip('during refresh')
+                    data.sendall(b'during refresh\n')
+                ftp.voidresp()
+                (self.root / 'finish-scan').touch()
+                self.command('wait 500')
+                self.command('hide')  # Late firmware hide after completion.
+                round_trip('after refresh')
+                self.assertIn('still-connected.txt', ftp.nlst())
+                self.command('show')
+                self.assertIn('Library refresh finished', self.ui_text())
+            self.assertEqual((self.share / 'still-connected.txt').read_bytes(),
+                             b'before refresh\nduring refresh\n')
+        finally:
+            client.stdin.close()
+            if client.poll() is None:
+                client.terminate(); client.wait(timeout=5)
+            client.stdout.close(); client.stderr.close()
+        self.command('background')  # Normal background policy resumes after return.
+        self.assert_closed(self.ssh_port); self.assert_closed(self.ftp_port)
+
+    def test_services_can_start_during_library_refresh_and_survive_delayed_hide(self):
+        self.prepare_scanner()
+        self.command('press refresh-library')
+        self.start('ssh'); self.start('ftp')
+        self.ssh()
+        (self.root / 'finish-scan').touch()
+        self.command('wait 500')
+        self.assertIn('Library refresh finished', self.ui_text())
+        self.command('hide')
+        self.ssh()
+        with self.ftp() as ftp:
+            ftp.storbinary('STOR after-refresh.txt', io.BytesIO(b'connections preserved'))
+        self.assertEqual((self.share / 'after-refresh.txt').read_bytes(), b'connections preserved')
+        self.command('show')
+
     def test_running_settings_locked_and_other_tab_keyboard_keeps_ssh_alive(self):
         self.start('ssh')
         before=(self.root/'easy-connect.conf').read_bytes()
@@ -142,17 +209,18 @@ class SessionTests(unittest.TestCase):
 
     def test_background_and_hide_close_both_daemons_and_allow_restart(self):
         for event in ('hide', 'background'):
-            with self.subTest(event=event):
-                self.start('ssh'); self.start('ftp')
-                self.command(event)
-                self.assert_closed(self.ssh_port)
-                self.assert_closed(self.ftp_port)
-                self.command('show')
-                for tab in ('ssh', 'ftp'):
-                    self.tab(tab)
-                    self.assertIn('STOPPED', self.ui_text())
-                    self.assertIn('left the foreground', self.ui_text())
-                self.start('ssh'); self.ssh(); self.stop('ssh')
+            for resume in ('show', 'foreground', 'activate'):
+                with self.subTest(event=event, resume=resume):
+                    self.start('ssh'); self.start('ftp')
+                    self.command(event)
+                    self.assert_closed(self.ssh_port)
+                    self.assert_closed(self.ftp_port)
+                    self.command(resume)
+                    for tab in ('ssh', 'ftp'):
+                        self.tab(tab)
+                        self.assertIn('STOPPED', self.ui_text())
+                        self.assertIn('left the foreground', self.ui_text())
+                    self.start('ssh'); self.ssh(); self.stop('ssh')
 
     def test_exit_button_closes_both_daemons(self):
         self.start('ssh'); self.start('ftp')
@@ -220,7 +288,9 @@ class SessionTests(unittest.TestCase):
     def test_crashed_ssh_listener_updates_status_and_leaves_ftp_running(self):
         self.start('ssh')
         children = Path(f'/proc/{self.process.pid}/task/{self.process.pid}/children')
-        supervisor = children.read_text().split()
+        # Supervisors lead their own process groups; the InkView helper does not.
+        supervisor = [pid for pid in children.read_text().split()
+                      if os.getpgid(int(pid)) == int(pid)]
         self.assertEqual(len(supervisor), 1)
         descendants = Path(f'/proc/{supervisor[0]}/task/{supervisor[0]}/children').read_text().split()
         self.assertEqual(len(descendants), 1)

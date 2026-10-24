@@ -36,7 +36,7 @@ static bool read_device_address(char *out, size_t size) {
 }
 
 static void redraw(void) {
-    if (app.editor.field != UI_EDIT_NONE) {
+    if (!app.foreground || app.editor.field != UI_EDIT_NONE) {
         return;
     }
     app.network_available = read_device_address(app.device_address, sizeof app.device_address);
@@ -318,8 +318,37 @@ static void save_diagnostics(void) {
     ec_doctor(&app.config, out);
     fprintf(out, "UI viewport: %d x %d\nUI screen: %d x %d\nUI panel type: %d\n",
             app.screen_width, app.screen_height, ScreenWidth(), ScreenHeight(), GetPanelType());
+    fprintf(out, "Library refresh: %s\nLibrary scan log: %s/library-scan.log\n",
+            app.library_refresh ? "running" : "idle", app.config.root);
     fclose(out);
     notify("Saved diagnostics.txt in the app folder.");
+}
+
+static void refresh_library(void) {
+    if (app.library_refresh) {
+        notify("Library refresh is already running.");
+        return;
+    }
+    if (ui_library_start(&app)) {
+        notify(ec_last_error());
+        return;
+    }
+    app.library_handoff = true;
+    for (ui_tab tab = UI_TAB_SSH; tab < UI_TAB_COUNT; ++tab) {
+        set_notice(tab, "Refreshing library. The firmware may show a scanning screen.");
+    }
+}
+
+static bool poll_library(void) {
+    int result = ui_library_poll(&app);
+    if (result) {
+        const char *message = result > 0 ? "Library refresh finished. Open Library to see changes."
+                                         : ec_last_error();
+        for (ui_tab tab = UI_TAB_SSH; tab < UI_TAB_COUNT; ++tab) {
+            set_notice(tab, message);
+        }
+    }
+    return result != 0;
 }
 
 static void activate_control(ui_control_id control) {
@@ -365,6 +394,9 @@ static void activate_control(ui_control_id control) {
     case UI_SAVE_DIAGNOSTICS:
         save_diagnostics();
         break;
+    case UI_REFRESH_LIBRARY:
+        refresh_library();
+        break;
     case UI_EXIT:
         CloseApp();
         break;
@@ -383,7 +415,7 @@ static void handle_pointer_up(int screen_x, int screen_y) {
     int logical_y = screen_y * UI_CANVAS_HEIGHT / app.screen_height;
     ui_control_id control = ui_hit_test(app.active_tab, &app.config, logical_x, logical_y);
     if (!app.network_available && control != UI_SSH_TAB && control != UI_FTP_TAB &&
-        control != UI_EXIT && control != UI_SAVE_DIAGNOSTICS) {
+        control != UI_EXIT && control != UI_SAVE_DIAGNOSTICS && control != UI_REFRESH_LIBRARY) {
         return;
     }
     activate_control(control);
@@ -393,6 +425,7 @@ static void handle_pointer_up(int screen_x, int screen_y) {
 }
 
 static void refresh_status(void) {
+    bool library_changed = poll_library();
     pid_t previous_ssh = app.services.ssh;
     pid_t previous_ftp = app.services.ftp;
     ec_poll(&app.services);
@@ -404,14 +437,23 @@ static void refresh_status(void) {
     }
     char address[sizeof app.device_address];
     read_device_address(address, sizeof address);
-    if (previous_ssh != app.services.ssh || previous_ftp != app.services.ftp ||
-        strcmp(address, app.device_address)) {
+    if (app.foreground && (library_changed || previous_ssh != app.services.ssh ||
+        previous_ftp != app.services.ftp || strcmp(address, app.device_address))) {
         redraw();
     }
-    SetHardTimer("easy-connect-status", refresh_status, UI_STATUS_REFRESH_MS);
+    if (app.foreground || app.library_refresh || app.library_handoff) {
+        SetHardTimer("easy-connect-status", refresh_status, UI_STATUS_REFRESH_MS);
+    }
 }
 
 static void enter_background(void) {
+    app.foreground = false;
+    if (app.library_refresh || app.library_handoff) {
+        /* Preserve transfers while the firmware scanner owns the screen,
+         * including delayed hide events after the scanner has finished. */
+        SetHardTimer("easy-connect-status", refresh_status, UI_STATUS_REFRESH_MS);
+        return;
+    }
     ClearTimer(refresh_status);
     ec_stop_all(&app.config, &app.services);
     for (ui_tab tab = UI_TAB_SSH; tab < UI_TAB_COUNT; ++tab) {
@@ -442,6 +484,7 @@ static void close_font(ifont **font) {
 
 static void close_application(void) {
     ClearTimer(refresh_status);
+    ui_library_stop(&app);
     if (app.services_open) {
         ec_services_close(&app.config, &app.services);
         app.services_open = false;
@@ -453,6 +496,17 @@ static void close_application(void) {
 }
 
 static int handle_event(int type, int parameter1, int parameter2) {
+    /* Lifecycle traces survive a frozen screen in ui.log. Never log keyboard
+     * contents; limit touch traces so normal use cannot flood the log. */
+    static unsigned touches;
+    bool trace = type == EVT_INIT || type == EVT_SHOW || type == EVT_HIDE ||
+                 type == EVT_FOREGROUND || type == EVT_BACKGROUND || type == EVT_FOCUS ||
+                 type == EVT_ACTIVATE || type == EVT_EXIT || type == EVT_ORIENTATION;
+    if (type == EVT_POINTERUP && touches++ < 32) trace = true;
+    if (trace) {
+        fprintf(stderr, "UI event %d begin pid=%ld foreground=%d editor=%d\n",
+                type, (long)getpid(), app.foreground, app.editor.field);
+    }
     switch (type) {
     case EVT_INIT:
         /* Full-screen layout: the system panel otherwise offsets scanout and
@@ -465,7 +519,18 @@ static int handle_event(int type, int parameter1, int parameter2) {
         }
         break;
     case EVT_SHOW:
+    case EVT_FOREGROUND:
+    case EVT_ACTIVATE:
+    case EVT_FOCUS:
+        /* Returning through Home/task switching need not send EVT_SHOW. */
+        SetPanelType(PANEL_DISABLED);
+        app.screen_width = ScreenWidth();
+        app.screen_height = ScreenHeight();
+        app.foreground = true;
+        app.library_handoff = false;
+        poll_library();
         redraw();
+        ClearTimer(refresh_status);
         SetHardTimer("easy-connect-status", refresh_status, UI_STATUS_REFRESH_MS);
         break;
     case EVT_REPAINT:
@@ -497,10 +562,15 @@ static int handle_event(int type, int parameter1, int parameter2) {
         close_application();
         break;
     }
+    if (trace) {
+        fprintf(stderr, "UI event %d end foreground=%d\n", type, app.foreground);
+    }
     return 0;
 }
 
 int main(void) {
+    setvbuf(stderr, NULL, _IONBF, 0);
+    fprintf(stderr, "Easy Connect UI build %s %s pid=%ld\n", __DATE__, __TIME__, (long)getpid());
     umask(0077);
     const char *root = EC_DEFAULT_ROOT;
 #ifdef EC_UI_TEST

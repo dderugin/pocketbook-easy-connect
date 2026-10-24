@@ -24,7 +24,7 @@ static void draw_text(ui_text_id area, const char *value, ifont *font) {
 static void draw_button(const ui_app *app, ui_control_id control, const char *label, bool selected,
                         bool enabled) {
     if (control != UI_SSH_TAB && control != UI_FTP_TAB &&
-        control != UI_EXIT && control != UI_SAVE_DIAGNOSTICS) {
+        control != UI_EXIT && control != UI_SAVE_DIAGNOSTICS && control != UI_REFRESH_LIBRARY) {
         enabled = enabled && app->network_available;
     }
     ui_rect bounds = ui_control_bounds(control);
@@ -150,12 +150,14 @@ static void draw_ftp_settings(const ui_app *app) {
 
 static void draw_footer(const ui_app *app) {
     const char *notice = app->notices[app->active_tab];
-    if (!app->network_available) {
+    if (!app->network_available && !*notice) {
         notice = "Connect to Wi-Fi in device settings. Waiting for an IP address...";
     }
     draw_text(UI_TEXT_NOTICE, *notice ? notice : "Stop this daemon before changing its settings.",
               app->fonts.small);
     draw_button(app, UI_SAVE_DIAGNOSTICS, "Save diagnostics", false, true);
+    draw_button(app, UI_REFRESH_LIBRARY, app->library_refresh ? "Refreshing..." : "Refresh Library",
+                false, !app->library_refresh);
     draw_button(app, UI_EXIT, "Exit", false, true);
 }
 

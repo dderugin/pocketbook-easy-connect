@@ -128,6 +128,12 @@ sources. Later runs reuse the `work/` cache. The ZIP and checksum are written to
 
 ## Install and configure
 
+For an upgrade, press **Exit** in Easy Connect before connecting USB and replacing
+its files. Home and the task switcher can leave the existing process running;
+reopening it does not guarantee that the new executable has loaded. If the app
+was running during an update or is unresponsive, safely eject USB and fully
+power the reader off and on before testing the installed build.
+
 1. Extract/merge the ZIP into the reader's USB storage root.
 2. Factory configuration is included as `system/share/easy-connect/easy-connect.conf.default`.
    The app reads it when no saved `easy-connect.conf` exists. Saved settings always
@@ -161,16 +167,37 @@ folder, and the relevant username/password or anonymous-login details.
 The interface checks the device IP address every second. While no address is
 available, service buttons and settings are disabled and a Wi-Fi connection
 hint is shown. Controls enable automatically when an address appears; no manual
-refresh is required. Tabs, Exit and Save diagnostics remain available offline.
+refresh is required. Tabs, Refresh Library, Exit and Save diagnostics remain available offline.
 
 Changes save immediately and survive app restarts. Configuration for a running
 daemon is locked; stop that daemon before editing it. Stopping SSH leaves FTP
 running, and stopping FTP leaves SSH running. Keyboard overlays do not stop the
-other daemon. Closing or backgrounding the whole app stops both.
+other daemon. Closing or backgrounding the whole app stops both, except for the
+firmware scanner's temporary screen takeover during Refresh Library.
 
 Each password is entered twice with masked input and saved as a salted verifier.
 Existing passwords are never displayed. Public key import is currently via USB;
 the UI reports the file location and entry count.
+
+### Refresh the PocketBook Library
+
+After copying, renaming or removing books over FTP/SSH, tap **Refresh Library** in
+either tab. SSH/FTP can remain running, including active transfers. The action
+also works without Wi-Fi. It asks the firmware's `/ebrmain/bin/scanner.app` to rescan;
+the firmware may display a scanning screen. Open Library after it finishes.
+
+While a refresh runs, the button shows **Refreshing...**. Services can still be
+started or stopped. Existing connections remain active while the firmware scanner
+temporarily takes the screen, including until Easy Connect returns to the foreground.
+Files still being uploaded may need another refresh after the upload completes.
+A background supervisor watches for the scanner's completion message,
+then dismisses only the scanner instance it started. It never kills the system's
+persistent scanner. A two-minute timeout and app-exit cleanup prevent a stuck
+temporary scanner from remaining open. The app reports failures and keeps
+`system/share/easy-connect/library-scan.log` for diagnostics. Missing firmware
+scanner support is reported on screen. Refreshing does not reset the Library
+database or erase reading history. This firmware integration still needs
+physical PB632 acceptance testing.
 
 ### SSH public keys
 

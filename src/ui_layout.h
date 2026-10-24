@@ -45,6 +45,7 @@ typedef enum {
     UI_FTP_ROOT,
     UI_FTP_SET_PASSWORD,
     UI_SAVE_DIAGNOSTICS,
+    UI_REFRESH_LIBRARY,
     UI_EXIT,
     UI_CONTROL_COUNT
 } ui_control_id;

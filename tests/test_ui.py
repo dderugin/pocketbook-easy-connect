@@ -16,10 +16,15 @@ class UITests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root=Path(self.temp.name)
 
-    def run_ui(self,events, *, width=None, height=None, address='192.0.2.1'):
+    def run_ui(self,events, *, width=None, height=None, address='192.0.2.1', scanner=None, scan_timeout=None, helper=False):
         script=self.root/'events.txt'
         script.write_text('\n'.join(events)+'\n')
         environment = dict(os.environ, EC_UI_ROOT=str(self.root), EC_UI_EVENTS=str(script), EC_UI_ADDRESS=address)
+        environment['EC_UI_SCANNER'] = str(scanner or self.root / 'missing-scanner')
+        if helper:
+            environment['EC_UI_HELPER'] = '1'
+        if scan_timeout is not None:
+            environment['EC_UI_SCAN_TIMEOUT_MS'] = str(scan_timeout)
         if width is not None:
             environment['EC_UI_WIDTH'] = str(width)
         if height is not None:
@@ -50,6 +55,26 @@ class UITests(unittest.TestCase):
         self.assertIn('FTP daemon',ftp.read_text())
         self.assertIn('No password',ftp.read_text())
         self.assertIn('Starting folder:',ftp.read_text())
+
+    def test_home_and_task_switcher_resume_restores_drawing_input_and_status_timer(self):
+        for event in ('foreground', 'activate', 'focus'):
+            with self.subTest(event=event):
+                text = self.root / 'resumed.txt'
+                events = ['press ftp-tab']
+                for _ in range(3):
+                    events += ['hide', 'background', event, 'press ssh-tab',
+                               'press ssh-port', 'key 2233', 'press ftp-tab']
+                events += ['press ssh-tab', 'network 192.0.2.78', 'tick', f'text {text}']
+                self.run_ui(events)
+                screen = text.read_text()
+                self.assertIn('SSH daemon', screen)
+                self.assertIn('SSH port: 2233', screen)
+                self.assertIn('192.0.2.78', screen)
+                self.assertIn('Refresh Library', screen)
+
+    def test_background_and_exit_preserve_inkview_helper_children(self):
+        self.run_ui(['background', 'hide', 'show', 'press ftp-tab',
+                     'background', 'show', 'press exit'], helper=True)
 
     def test_access_types_persist_and_survive_reopen(self):
         self.run_ui(['press ssh-password','press ftp-tab','press ftp-anonymous'])
@@ -227,19 +252,21 @@ class UITests(unittest.TestCase):
         import xml.etree.ElementTree as ET
         for width, height in ((720, 960), (1072, 1448), (1404, 1872)):
             with self.subTest(width=width, height=height):
-                snapshots = [self.root / f'frame-{i}.svg' for i in range(4)]
+                snapshots = [self.root / f'frame-{i}.svg' for i in range(6)]
                 self.run_ui([f'snapshot {snapshots[0]}', 'repaint',
                     f'snapshot {snapshots[1]}', 'press ssh-port', 'cancel',
                     'hide', 'show', f'snapshot {snapshots[2]}', 'orientation',
                     'press ftp-tab', 'press ssh-tab', 'press ftp-tab', 'repaint',
-                    f'snapshot {snapshots[3]}'],
+                    f'snapshot {snapshots[3]}', 'background', 'foreground',
+                    f'snapshot {snapshots[4]}', 'hide', 'activate',
+                    f'snapshot {snapshots[5]}'],
                     width=width, height=height)
                 positions = []
                 for snapshot in snapshots:
                     elements = ET.parse(snapshot).getroot().iter()
                     footer = {e.text: int(e.attrib['y']) for e in elements
-                              if e.tag.endswith('text') and e.text in ('Save diagnostics', 'Exit')}
-                    self.assertEqual(set(footer), {'Save diagnostics', 'Exit'})
+                              if e.tag.endswith('text') and e.text in ('Save diagnostics', 'Refresh Library', 'Exit')}
+                    self.assertEqual(set(footer), {'Save diagnostics', 'Refresh Library', 'Exit'})
                     self.assertTrue(all(y > height * .9 for y in footer.values()))
                     positions.append(footer)
                 self.assertTrue(all(p == positions[0] for p in positions))
@@ -279,6 +306,109 @@ class UITests(unittest.TestCase):
                 self.assertIn('ftp_port=2133', config)
                 self.assertIn('ftp_auth=anonymous', config)
                 self.assertIn('Login as anonymous', text.read_text())
+
+    def make_scanner(self, body):
+        scanner = self.root / 'scanner.app'
+        scanner.write_text(f'#!{sys.executable}\n'
+            'import os, signal, sys, time\nfrom pathlib import Path\n'
+            f'Path({str(self.root / "scanner.pid")!r}).write_text(str(os.getpid()))\n'
+            f'with open({str(self.root / "launches")!r}, "a") as f: f.write("start\\n")\n'
+            + body + '\n')
+        scanner.chmod(0o755)
+        return scanner
+
+    def assert_scanner_gone(self):
+        pid = int((self.root / 'scanner.pid').read_text())
+        with self.assertRaises(ProcessLookupError):
+            os.kill(pid, 0)
+
+    def test_library_refresh_available_on_both_tabs_offline(self):
+        scanner = self.make_scanner('print("Scan finished", flush=True)\ntime.sleep(60)')
+        for tab in ('ssh', 'ftp'):
+            with self.subTest(tab=tab):
+                text = self.root / 'refresh.txt'
+                self.run_ui([f'press {tab}-tab', 'press refresh-library', 'wait 450',
+                             f'text {text}'], address='', scanner=scanner)
+                self.assertIn('Library refresh finished', text.read_text())
+                self.assert_scanner_gone()
+        self.assertEqual((self.root / 'launches').read_text().count('start'), 2)
+
+    def test_library_refresh_survives_background_without_duplicate_launch(self):
+        scanner = self.make_scanner('print("Scan finished", flush=True)\ntime.sleep(60)')
+        text = self.root / 'refresh.txt'
+        self.run_ui(['press refresh-library', 'press refresh-library', 'background',
+                     'hide', 'wait 450', 'show', 'press ftp-tab', f'text {text}',
+                     'press save-diagnostics'], scanner=scanner)
+        self.assertIn('Library refresh finished', text.read_text())
+        self.assertEqual((self.root / 'launches').read_text().count('start'), 1)
+        self.assertIn('Scan finished', (self.root / 'library-scan.log').read_text())
+        self.assertIn('Library scan log:', (self.root / 'diagnostics.txt').read_text())
+        self.assert_scanner_gone()
+
+    def test_library_refresh_missing_or_failed_scanner_reports_error(self):
+        text = self.root / 'refresh.txt'
+        self.run_ui(['press refresh-library', f'text {text}'], address='')
+        self.assertIn('Library scanner unavailable', text.read_text())
+        scanner = self.make_scanner('print("scanner failure", flush=True)\nsys.exit(7)')
+        self.run_ui(['press refresh-library', 'wait 450', f'text {text}'], scanner=scanner)
+        self.assertIn('Library refresh failed', text.read_text())
+        self.assertNotIn('Library refresh finished', text.read_text())
+        self.assertIn('scanner failure', (self.root / 'library-scan.log').read_text())
+        self.assert_scanner_gone()
+
+    def test_library_refresh_timeout_and_exit_cleanup(self):
+        scanner = self.make_scanner('time.sleep(60)')
+        text = self.root / 'timeout.txt'
+        self.run_ui(['press refresh-library', 'wait 600', f'text {text}'],
+                    scanner=scanner, scan_timeout=150)
+        self.assertIn('Library refresh timed out', text.read_text())
+        self.assert_scanner_gone()
+        self.run_ui(['press refresh-library', 'wait 200', 'press exit'], scanner=scanner)
+        self.assert_scanner_gone()
+
+    def test_library_refresh_forces_cleanup_when_scanner_ignores_termination(self):
+        scanner = self.make_scanner('signal.signal(signal.SIGTERM, signal.SIG_IGN)\n'
+                                    'print("Scan finished", flush=True)\ntime.sleep(60)')
+        text = self.root / 'forced-cleanup.txt'
+        self.run_ui(['press refresh-library', 'wait 1700', f'text {text}'], scanner=scanner)
+        self.assertIn('Library refresh finished', text.read_text())
+        self.assert_scanner_gone()
+
+    def test_library_refresh_rejects_unsafe_log_without_touching_target(self):
+        scanner = self.make_scanner('sys.exit(0)')
+        target = self.root / 'keep.txt'
+        target.write_text('keep this')
+        (self.root / 'library-scan.log').symlink_to(target)
+        text = self.root / 'unsafe-log.txt'
+        self.run_ui(['press refresh-library', f'text {text}'], scanner=scanner)
+        self.assertIn('Cannot open library-scan.log', text.read_text())
+        self.assertEqual(target.read_text(), 'keep this')
+        self.assertFalse((self.root / 'scanner.pid').exists())
+        (self.root / 'library-scan.log').unlink()
+        os.mkfifo(self.root / 'library-scan.log')
+        self.run_ui(['press refresh-library', f'text {text}'], scanner=scanner)
+        self.assertIn('Cannot create a regular library scan log', text.read_text())
+        self.assertFalse((self.root / 'scanner.pid').exists())
+
+    def test_library_refresh_allows_start_and_handles_exec_failure(self):
+        scanner = self.make_scanner('time.sleep(60)')
+        text = self.root / 'busy.txt'
+        self.run_ui(['press refresh-library', 'press start', f'text {text}'], scanner=scanner)
+        self.assertIn('Add a .pub key', text.read_text())
+        self.assertNotIn('Wait for the library refresh', text.read_text())
+        scanner.write_text('invalid executable contents\n')
+        self.run_ui(['press refresh-library', 'wait 450', f'text {text}'], scanner=scanner)
+        self.assertIn('Library refresh failed', text.read_text())
+
+    def test_library_refresh_completion_marker_across_chunks_and_repeated_refresh(self):
+        scanner = self.make_scanner('sys.stdout.write("x" * 4090 + "Scan finished\\n")\n'
+                                    'sys.stdout.flush()\ntime.sleep(60)')
+        text = self.root / 'done.txt'
+        self.run_ui(['press refresh-library', 'wait 450', 'press refresh-library',
+                     'wait 450', f'text {text}'], scanner=scanner)
+        self.assertIn('Library refresh finished', text.read_text())
+        self.assertEqual((self.root / 'launches').read_text().count('start'), 2)
+        self.assert_scanner_gone()
 
     def test_pointer_input_is_ignored_while_keyboard_is_open(self):
         text = self.root / 'editing.txt'

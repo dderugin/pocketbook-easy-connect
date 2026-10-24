@@ -80,9 +80,12 @@ static const control_definition controls[UI_CONTROL_COUNT] = {
                              {COLUMN_RIGHT, 688, THREE_COLUMN_WIDTH, PORT_ROW_HEIGHT},
                              SCOPE_FTP},
     [UI_SAVE_DIAGNOSTICS] = {"save-diagnostics",
-                             {PAGE_MARGIN, FOOTER_TOP, 450, FOOTER_HEIGHT},
+                             {COLUMN_LEFT, FOOTER_TOP, THREE_COLUMN_WIDTH, FOOTER_HEIGHT},
                              SCOPE_COMMON},
-    [UI_EXIT] = {"exit", {498, FOOTER_TOP, 198, FOOTER_HEIGHT}, SCOPE_COMMON}};
+    [UI_REFRESH_LIBRARY] = {"refresh-library",
+                            {COLUMN_MIDDLE, FOOTER_TOP, THREE_COLUMN_WIDTH, FOOTER_HEIGHT},
+                            SCOPE_COMMON},
+    [UI_EXIT] = {"exit", {COLUMN_RIGHT, FOOTER_TOP, THREE_COLUMN_WIDTH, FOOTER_HEIGHT}, SCOPE_COMMON}};
 
 /* Text-only regions do not participate in hit testing. */
 static const ui_rect text_regions[UI_TEXT_COUNT] = {

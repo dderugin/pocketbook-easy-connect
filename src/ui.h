@@ -44,6 +44,9 @@ typedef struct {
     char ssh_user[64];
     bool ftp_rootless;
     bool network_available;
+    bool foreground;
+    bool library_handoff;
+    pid_t library_refresh;
     int screen_width, screen_height;
 } ui_app;
 
@@ -56,5 +59,9 @@ static inline bool ui_is_running(const ui_app *app, ui_tab tab) {
 }
 
 void ui_draw(const ui_app *app);
+int ui_library_start(ui_app *app);
+/* 0 while running/idle, 1 on completion, -1 on failure. */
+int ui_library_poll(ui_app *app);
+void ui_library_stop(ui_app *app);
 
 #endif

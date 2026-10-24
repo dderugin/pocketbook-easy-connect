@@ -11,6 +11,7 @@ typedef int (*iv_handler)(int,int,int);
 #define ALIGN_LEFT 1
 #define PANEL_DISABLED 0
 #define DEFAULTFONT "test"
+#define SYSTEMSCANNER "/ebrmain/bin/scanner.app"
 #define KBD_NUMERIC 4
 #define KBD_PASSWORD 0x100
 #define KEY_BACK 27
@@ -23,6 +24,9 @@ typedef int (*iv_handler)(int,int,int);
 #define EVT_EXIT 7
 #define EVT_REPAINT 43
 #define EVT_ORIENTATION 32
+#define EVT_ACTIVATE 38
+#define EVT_FOCUS 36
+#define EVT_FOREGROUND 151
 int ScreenWidth(void);
 int ScreenHeight(void);
 ifont *OpenFont(const char *,int,int);

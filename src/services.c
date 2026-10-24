@@ -21,7 +21,6 @@ enum {
     SERVICE_POLL_INTERVAL_MS = 20,
     SERVICE_START_TIMEOUT_MS = 2000,
     SERVICE_STOP_TIMEOUT_MS = 3000,
-    SERVICE_CLOSE_TIMEOUT_MS = 2000,
     SERVICE_TERMINATE_GRACE_MS = 500,
     LISTENER_PROBE_TIMEOUT_US = 10000
 };
@@ -553,52 +552,11 @@ int ec_stop(ec_config *config, ec_services *services, const char *name) {
     return ec_error("%s is still stopping; try again", name);
 }
 
-static void signal_children(ec_services *services, int sig) {
-    if (services->ssh > 0) {
-        kill(-services->ssh, sig);
-    }
-    if (services->ftp > 0) {
-        kill(-services->ftp, sig);
-    }
-#ifdef __linux__
-    char path[128];
-    snprintf(path, sizeof path, "/proc/self/task/%ld/children", (long)getpid());
-    FILE *file = fopen(path, "r");
-    if (file) {
-        long child;
-        while (fscanf(file, "%ld", &child) == 1) {
-            if (child > 1) {
-                kill((pid_t)child, sig);
-            }
-        }
-        fclose(file);
-    }
-#endif
-}
-
 void ec_stop_all(ec_config *config, ec_services *services) {
-    (void)config;
-    /* On Linux, orphaned session descendants are adopted and terminated too. */
-    for (int i = 0; i < SERVICE_CLOSE_TIMEOUT_MS / SERVICE_POLL_INTERVAL_MS; ++i) {
-        signal_children(services, i < SERVICE_TERMINATE_GRACE_MS / SERVICE_POLL_INTERVAL_MS
-                                      ? SIGTERM
-                                      : SIGKILL);
-        int status;
-        pid_t reaped;
-        while ((reaped = waitpid(-1, &status, WNOHANG)) > 0) {
-            if (reaped == services->ssh) {
-                services->ssh = 0;
-            }
-            if (reaped == services->ftp) {
-                services->ftp = 0;
-            }
-        }
-        if (reaped < 0 && errno == ECHILD) {
-            break;
-        }
-        pause_ms(SERVICE_POLL_INTERVAL_MS);
-    }
-    services->ssh = services->ftp = 0;
+    /* Each supervisor reaps and terminates its own session descendants.
+     * InkView can have helper children too: never signal or reap them here. */
+    ec_stop(config, services, "ssh");
+    ec_stop(config, services, "ftp");
 }
 
 void ec_services_close(ec_config *config, ec_services *services) {

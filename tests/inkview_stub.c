@@ -5,6 +5,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
+#include <signal.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#ifdef __linux__
+#include <sys/prctl.h>
+#endif
 static char svg[131072], plain[32768];
 static size_t used = 0, plain_used = 0;
 static const ifont *font;
@@ -189,6 +196,21 @@ void CloseApp(void) {
 }
 
 void InkViewMain(iv_handler handler) {
+    /* Firmware may own helper children independently of SSH/FTP. */
+    pid_t helper = 0;
+    if (getenv("EC_UI_HELPER")) {
+        pid_t parent = getpid();
+        helper = fork();
+        if (!helper) {
+#ifdef __linux__
+            if (prctl(PR_SET_PDEATHSIG, SIGKILL) || getppid() != parent) _exit(1);
+#else
+            (void)parent;
+#endif
+            for (;;) pause();
+        }
+        if (helper < 0) abort();
+    }
     handler(EVT_INIT, 0, 0);
     if (!closed) {
         handler(EVT_SHOW, 0, 0);
@@ -236,10 +258,25 @@ void InkViewMain(iv_handler handler) {
         } else if (!strcmp(command, "show")) {
             panel_type = 2; /* Firmware restores its panel on foreground entry. */
             handler(EVT_SHOW, 0, 0);
+        } else if (!strcmp(command, "foreground")) {
+            panel_type = 2;
+            handler(EVT_FOREGROUND, 0, 0);
+        } else if (!strcmp(command, "activate")) {
+            panel_type = 2;
+            handler(EVT_ACTIVATE, 0, 0);
+        } else if (!strcmp(command, "focus")) {
+            panel_type = 2;
+            handler(EVT_FOCUS, 0, 0);
         } else if (!strcmp(command, "background")) {
             handler(EVT_BACKGROUND, 0, 0);
         } else if (!strcmp(command, "tick") && timer_callback) {
             timer_callback();
+        } else if (sscanf(command, "wait %d", &x) == 1 && x >= 0 && x <= 5000) {
+            struct timespec delay = {x / 1000, (x % 1000) * 1000000};
+            nanosleep(&delay, NULL);
+            if (timer_callback) {
+                timer_callback();
+            }
         } else if (!strncmp(command, "snapshot ", 9)) {
             FILE *out = fopen(command + 9, "w");
             if (!out) {
@@ -264,4 +301,13 @@ void InkViewMain(iv_handler handler) {
         fclose(in);
     }
     handler(EVT_EXIT, 0, 0);
+    if (helper) {
+        int status;
+        if (waitpid(helper, &status, WNOHANG) != 0) {
+            fprintf(stderr, "InkView helper was killed or reaped by service cleanup\n");
+            exit(1);
+        }
+        kill(helper, SIGTERM);
+        waitpid(helper, NULL, 0);
+    }
 }
