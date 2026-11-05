@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import tarfile
 from urllib.request import urlopen
+from pocketbook_platform import load_profile
 
 ROOT = Path(__file__).resolve().parent.parent
 LOCK = json.loads((ROOT / 'dependencies.json').read_text())
@@ -67,8 +68,9 @@ def build(name, sdk, prefix):
         env['CC'] = str(cc)
         env['AR'] = str(sdk / 'usr/bin/arm-obreey-linux-gnueabi-ar')
         env['RANLIB'] = str(sdk / 'usr/bin/arm-obreey-linux-gnueabi-ranlib')
-        cflags += f' --sysroot={sysroot} -mcpu=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=softfp'
-        ldflags += f' --sysroot={sysroot} -mcpu=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=softfp'
+        flags = ' '.join(load_profile(ROOT)['cpu_flags'])
+        cflags += f' --sysroot={sysroot} {flags}'
+        ldflags += f' --sysroot={sysroot} {flags} -Wl,--exclude-libs,ALL'
         configure = ['--host=arm-obreey-linux-gnueabi']
     elif prefix:
         cppflags += f' -I{prefix}/include'

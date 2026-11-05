@@ -40,6 +40,7 @@ typedef struct {
 typedef struct {
     pid_t ssh;
     pid_t ftp;
+    pid_t controller;
     int lock_fd;
 } ec_services;
 
@@ -56,6 +57,11 @@ int ec_private_dir(const char *path);
 int ec_copy_private(const char *source, const char *destination, int nonempty);
 bool ec_network_address(char *out, size_t size);
 int ec_doctor(const ec_config *config, FILE *out);
+int ec_detach_process_io(int log_fd);
+int ec_background_poll(ec_config *config, ec_services *services);
+int ec_background_start(ec_config *config, ec_services *services, const char *name, const char *program);
+int ec_background_stop(ec_config *config, ec_services *services, const char *name);
+int ec_background_serve(ec_config *config);
 int ec_services_open(ec_config *config, ec_services *services);
 int ec_start(ec_config *config, ec_services *services, const char *name);
 int ec_stop(ec_config *config, ec_services *services, const char *name);

@@ -1,12 +1,30 @@
 # Easy Connect for PocketBook
 
-Standalone SSH and FTP communication app for **PocketBook Touch HD 3 / PB632,
-firmware U632.6.11.2001**. Independent of CoolReader; it reuses the same
-B288 / Cortex-A7 softfp SDK target and USB installation layout.
+One shared **ARMv7 Linux softfp** package for Touch HD 3, Verse Pro, Era and
+InkPad 4. The same application and service executables are used on every model;
+Easy Connect remains independent of CoolReader.
 
-[Download](https://pocketbook.nimbushub.eu/easy-connect.html) · [Installation and connection guide](https://pocketbook.nimbushub.eu/easy-connect.html#installation) · [GitHub repository](https://github.com/dderugin/pocketbook-easy-connect)
+[Download and installation guide](https://pocketbook.nimbushub.eu/easy-connect.html) · [GitHub repository](https://github.com/dderugin/pocketbook-easy-connect)
 
-**Development release with limited physical-device testing on PB632.**
+The shared package version is **0.2.0**. Known models use API-based firmware
+admission, matching the shared CoolReader policy: firmware patch/build numbers
+are not an exact-version whitelist. The latest known API level at or below the
+installed firmware is selected (6.10/6.11); unknown models and API levels below
+6.10 are rejected. Compatible softfp system libraries remain necessary.
+
+| Model | Firmware snapshot used for verification | Portrait size |
+| --- | --- | --- |
+| Touch HD 3 / PB632 | U632.6.11.2001 | 1072 × 1448 |
+| Verse Pro / PB634 | U634.6.10.3425 | 1072 × 1448 |
+| Era / PB700 | U700.6.10.3209 | 1264 × 1680 |
+| InkPad 4 / PB743G | U743g.6.11.1683 | 1404 × 1872 |
+
+These snapshots define the software checks, not a list of every compatible
+firmware build. Physical acceptance of this shared release, scanner behavior,
+Wi-Fi, suspend, USB and PTY availability still require testing on each reader.
+Earlier PB632 builds have limited physical SSH/FTP evidence, not validation of
+this new binary. Android and hard-float PocketBook variants require separate
+build families.
 
 ## Implemented
 
@@ -14,9 +32,10 @@ B288 / Cortex-A7 softfp SDK target and USB installation layout.
 - Dropbear SSH: public key, app-specific password, or either method.
 - Persistent per-device Ed25519 host keys and host-key fingerprint output.
 - Configuration validation, private runtime staging, exclusive session lock,
-  foreground server supervision, startup checks, and shutdown on Ctrl-C/SIGTERM.
+  server supervision, startup checks, and a background controller independent of the UI.
 - Two InkView tabs, SSH and FTP, each with daemon status, independent Start/Stop
   buttons, connection details and saved configuration.
+- Native firmware Home, refresh and diagnostics icons with the system application-caption font.
 - On-device password setup with masked entry and confirmation, plus SSH public
   key count/location and server fingerprint.
 - vsftpd FTP as the **launching user**, with either a separate application
@@ -24,12 +43,10 @@ B288 / Cortex-A7 softfp SDK target and USB installation layout.
 - Separate device build/package scripts, checksummed source dependencies, and
   automated controller/real SSH integration tests.
 
-The Linux ARM build uses the real B288 SDK. On a physical PB632, the app runs
-as `reader` (UID 101); anonymous FTP access and SSH commands/basic shell access
-have been confirmed. Firmware denied PTY allocation, so the SSH hint opens a
-shell over pipes. Full device acceptance testing, the latest UI corrections,
-and other models/firmware remain unverified. Host integration tests cover SSH
-and FTP transfers as a normal user. No root or jailbreak is needed for FTP.
+Normal operation uses the launching account, with no fixed UID or username and
+no root requirement. Host integration tests exercise actual SSH/FTP sessions;
+firmware probes run the ARM service tools and core operations under each pinned
+runtime. They cannot establish the physical reader's kernel or account policy.
 
 ## Build and test on a computer
 
@@ -47,10 +64,12 @@ python3 tools/dependencies.py build --service dropbear
 python3 tests/test_ssh.py build/easy-connect
 python3 tools/dependencies.py build --service vsftpd
 python3 tests/test_ftp.py build/easy-connect
+python3 tests/test_background.py build/easy-connect
 python3 tests/test_sessions.py build/ec-ui-test
 
-# Render both tabs from the actual C drawing code (SVG, plus PNG if rsvg-convert exists).
-python3 tools/preview-ui.py --build build --out work/ui-preview
+# Render both tabs from the actual C drawing code. Native assets remain local.
+python3 tools/native_theme.py work/firmware/pb632-native-theme.pbt --output work/native-ui-reference/pb632
+python3 tools/preview-ui.py --build build --theme-reference work/native-ui-reference/pb632 --out work/ui-preview
 ```
 
 For Homebrew OpenSSL on macOS, append
@@ -66,73 +85,76 @@ and dependency tests. The integration commands above exercise real daemons and
 independent service lifecycles. See [the test coverage matrix](tests/README.md)
 for covered behavior and the remaining SDK/device validation gaps.
 
-## Build for the reader
+## Build the shared reader package
 
-Use a **Linux x86_64** build host and SDK-B288-6.10. The SDK is pinned separately
-in [sdk.json](sdk.json), including its URL and SHA-256. It comes from the
-[Sean-on-Git community mirror](https://github.com/Sean-on-Git/PocketBook-SDK/releases/tag/6.10),
-which is also cited by [KOReader's InkView collection](https://github.com/koreader/pocketbook-inkview).
-This is not an official successor repository. SDK 6.11 from that mirror targets
-RK3566 and is not the default for this B288 build.
+The platform, version, CPU flags and model registry live in
+`config/pocketbook.json`; pinned firmware archives are in `config/firmware.json`.
+CMake and the daemon builds use the same ARMv7-A/NEON/VFPv3 softfp flags. The
+SDK's static crypto retains its own recorded ARM attributes; the supported
+models are checked with Cortex-A7 emulation. CPU/library ABI compatibility for
+additional models needs qualification before enabling them.
 
-On Ubuntu 24.04:
-
-```sh
-sudo apt-get install build-essential cmake python3 libarchive-tools
-
-# Explicit network steps; a cached SDK is always checked again before use.
-python3 tools/sdk.py fetch
-python3 tools/dependencies.py fetch
-bsdtar -xf work/sdk/SDK-B288-6.10.7z -C work/sdk
-bash tools/build-device.sh
-```
-
-The SDK download is about 613 MiB. Downloads stream to a temporary file and enter
-the cache only after checksum verification. `python3 tools/sdk.py verify` checks
-an existing download offline. Keep SDK symlinks intact when extracting; use
-`bsdtar` as above. The build defaults to `work/sdk/SDK-B288-6.10`; set
-`POCKETBOOK_SDK=/absolute/path/to/SDK-B288-6.10` to use an existing installation.
-Build commands never download the SDK automatically. The SDK's Linux binaries
-cannot run natively on macOS; use Linux or the GitHub Actions ARM build.
-
-The controller and daemon adapters link the SDK's ARM OpenSSL crypto archive
-statically (OpenSSL 3.4.1, with its license notice in the companion archive). InkView headers and
-its link library are located inside the SDK sysroot; the reader supplies InkView at runtime. The build rejects an unexpected
-shared OpenSSL dependency and writes ELF headers, interpreter, dependencies,
-ARM attributes and symbol versions to `build-device/arm-report.txt`.
-
-The build creates `dist/easy-connect-pb632-0.1.0.zip` and its SHA-256 checksum.
-The **B288 ARM build** workflow performs the same build and uploads a development
-artifact. The installation ZIP contains only seven files: the application launcher,
-five ARM executables, and `easy-connect.conf.default`. A separate
-`easy-connect-pb632-0.1.0-sources.zip` contains licenses, complete application/daemon
-sources, pinned daemon archives, build checksums and SDK metadata. Keep this
-companion archive on the computer; it does not need to be installed on the reader.
-The SDK archive itself is excluded from both ZIPs.
-
-Compare `arm-report.txt` with the actual firmware before installation. A successful
-cross build does not establish firmware compatibility or physical-reader support.
-
-### Local Docker build (including macOS)
-
-Docker runs the required Linux x86_64 toolchain, including on Apple Silicon:
+On macOS or Linux with Docker and its Buildx component:
 
 ```sh
-docker build --platform linux/amd64 -f tools/Dockerfile -t easy-connect-builder .
-docker run --rm --platform linux/amd64 -v "$PWD:/project" easy-connect-builder
+bash tools/build-shared-docker.sh
 ```
 
-The first run downloads and verifies the pinned SDK (about 613 MiB) and daemon
-sources. Later runs reuse the `work/` cache. The ZIP and checksum are written to
-`dist/`, and the ARM compatibility report to `build-device/arm-report.txt`.
+The wrapper mounts source read-only and stores build caches in the
+`easy-connect-pocketbook-armv7-softfp-work` volume. It runs tests as a non-root
+account on the Docker engine’s native architecture, so rootless SSH/FTP cases
+are executed without translating the host daemons. On ARM64 Docker engines,
+x86_64 binary translation must be enabled for the SDK compiler tools. The image
+provides their x86 libraries while keeping host tests and QEMU native.
+First setup downloads and
+verifies the pinned SDK, daemon sources and four firmware archives. No runtime
+firmware files or SDK archive are included in either release ZIP.
+
+To reuse existing local CoolReader input caches without making Easy Connect
+depend on that application:
+
+```sh
+EC_SDK_VOLUME=coolreader-pocketbook-armv7-softfp-work \
+EC_ARCHIVE_CACHE=/path/to/pocketbook-coolreader/work/downloads \
+EC_RUNTIME_CACHE=/path/to/pocketbook-coolreader/work/qualification \
+bash tools/build-shared-docker.sh
+```
+
+`POCKETBOOK_SDK` can select the pinned SDK on a native Linux x86_64 build host.
+The same pipeline can run with `bash tools/build-docker.sh` after installing
+build-essential, cmake, Python, OpenSSL development headers, OpenSSH client,
+libarchive-tools, curl, git, QEMU ARM 9.2+, e2fsprogs and squashfs-tools. The Docker wrapper
+includes a pinned modern emulator. Native Linux builders can use
+`bash tools/fetch-qemu.sh /tmp/ec-qemu-arm` and set `EC_QEMU=/tmp/ec-qemu-arm`;
+this copies a build tool without registering or changing system emulation. The historical
+`toolchain-touch-hd3.cmake` filename forwards to the shared toolchain.
+
+Before packaging, the pipeline runs native controller/UI/SSH/FTP/session tests,
+then checks all five ARM executables against all four firmware dependency
+closures and verifies the native theme has the caption style and all three toolbar icons. QEMU probes exercise password/filesystem operations, real SSH key and
+password login, authentication rejection, passive FTP transfers and anonymous
+FTP. The UI loader is checked separately; physical rendering and device events
+remain unverified. Static crypto symbols are hidden from firmware libraries, and
+the launcher applies the firmware executable-stack compatibility setting.
+
+Outputs:
+
+- `dist/easy-connect-pocketbook-armv7-softfp-0.2.0.zip`
+- `dist/easy-connect-pocketbook-armv7-softfp-0.2.0-sources.zip`
+- Their `.sha256` files.
+
+The install ZIP still contains only seven runtime files: the launcher, five
+executables and factory configuration. Source, notices, build metadata and the
+firmware verification report remain in the separate companion archive for the
+computer. Missing or stale firmware/binary/source evidence blocks packaging.
 
 ## Install and configure
 
-For an upgrade, press **Exit** in Easy Connect before connecting USB and replacing
-its files. Home and the task switcher can leave the existing process running;
-reopening it does not guarantee that the new executable has loaded. If the app
-was running during an update or is unresponsive, safely eject USB and fully
-power the reader off and on before testing the installed build.
+For an upgrade, press **Stop** in both the SSH and FTP tabs, then tap the
+**Home** icon before connecting USB and replacing files. Closing the UI alone
+leaves its background controller and any running services active. If files were
+replaced while services were running, safely eject USB and fully power the
+reader off and on before testing the installed build.
 
 1. Extract/merge the ZIP into the reader's USB storage root.
 2. Factory configuration is included as `system/share/easy-connect/easy-connect.conf.default`.
@@ -143,7 +165,7 @@ power the reader off and on before testing the installed build.
    For SSH key access, select **Public key** and import your `.pub` key over USB.
 4. Safely eject USB, connect the reader to Wi-Fi using its settings, then open
    **Applications → EasyConnect**.
-5. Start the desired service. Closing or backgrounding the app stops services.
+5. Start the desired service. Closing or backgrounding the app leaves services running; reopen it and press **Stop** to end them.
 
 The ZIP includes factory configuration only, with no shared password or anonymous
 access enabled. It never includes saved `easy-connect.conf`, credentials or host
@@ -167,13 +189,18 @@ folder, and the relevant username/password or anonymous-login details.
 The interface checks the device IP address every second. While no address is
 available, service buttons and settings are disabled and a Wi-Fi connection
 hint is shown. Controls enable automatically when an address appears; no manual
-refresh is required. Tabs, Refresh Library, Exit and Save diagnostics remain available offline.
+refresh is required. Tabs, Stop and all three top-bar icons remain available offline.
+The **Home** icon on the left closes Easy Connect. The circular-arrow icon
+refreshes the Library, and the native diagnostics icon saves a diagnostics report.
 
 Changes save immediately and survive app restarts. Configuration for a running
 daemon is locked; stop that daemon before editing it. Stopping SSH leaves FTP
 running, and stopping FTP leaves SSH running. Keyboard overlays do not stop the
-other daemon. Closing or backgrounding the whole app stops both, except for the
-firmware scanner's temporary screen takeover during Refresh Library.
+other daemon. Home, Back, closing and backgrounding leave both services and active transfers
+running. Reopen Easy Connect to see their status and press **Stop** in either
+tab to stop that service. The other service continues. The controller exits and
+removes its staged credentials when both services are stopped. A reboot stops
+all services; they are not automatically started again.
 
 Each password is entered twice with masked input and saved as a salted verifier.
 Existing passwords are never displayed. Public key import is currently via USB;
@@ -181,23 +208,56 @@ the UI reports the file location and entry count.
 
 ### Refresh the PocketBook Library
 
-After copying, renaming or removing books over FTP/SSH, tap **Refresh Library** in
+After copying, renaming or removing books over FTP/SSH, tap the **circular-arrow icon** in the top bar of
 either tab. SSH/FTP can remain running, including active transfers. The action
 also works without Wi-Fi. It asks the firmware's `/ebrmain/bin/scanner.app` to rescan;
 the firmware may display a scanning screen. Open Library after it finishes.
 
-While a refresh runs, the button shows **Refreshing...**. Services can still be
+While a refresh runs, its icon is dimmed and the status message shows progress. Services can still be
 started or stopped. Existing connections remain active while the firmware scanner
 temporarily takes the screen, including until Easy Connect returns to the foreground.
 Files still being uploaded may need another refresh after the upload completes.
 A background supervisor watches for the scanner's completion message,
 then dismisses only the scanner instance it started. It never kills the system's
-persistent scanner. A two-minute timeout and app-exit cleanup prevent a stuck
-temporary scanner from remaining open. The app reports failures and keeps
+persistent scanner. A two-minute timeout prevents a stuck temporary scanner from remaining open. The app reports failures and keeps
 `system/share/easy-connect/library-scan.log` for diagnostics. Missing firmware
 scanner support is reported on screen. Refreshing does not reset the Library
-database or erase reading history. This firmware integration still needs
-physical PB632 acceptance testing.
+database or erase reading history.
+
+Every normal app exit, including the Home icon, Back and a firmware close event,
+also refreshes the Library automatically. Easy Connect hands off a fresh scan
+and closes without waiting for it or interrupting either service. An in-progress
+manual scan is replaced by this final scan. Files uploaded after this scan need
+a later refresh; reopen the app and tap Refresh, or close it again. The final scanner has the same two-minute
+limit and only manages its own scanner instance; its result is recorded in
+`system/share/easy-connect/library-exit-scan.log`. An unavailable scanner or a
+startup failure is recorded in `ui.log` without preventing exit. Force-killing
+the process cannot run an exit action.
+
+This firmware integration still needs
+physical acceptance testing on each model.
+
+### Background services
+
+The UI reconnects to its controller through a private socket under
+`/tmp/easy-connect-UID/`. The controller runs as the launching account and owns
+its SSH/FTP supervisors; closing or even force-killing the UI leaves it running.
+Only the same account can control it, and Stop targets its owned processes
+rather than trusting saved PID files. Existing settings are shown and locked
+for running services after reopening the UI. No additional executable is
+installed: the existing `easy-connect` tool also runs the headless controller.
+
+For command-line control of UI-started services:
+
+```sh
+system/share/easy-connect/bin/easy-connect background-status
+system/share/easy-connect/bin/easy-connect background-stop ssh
+system/share/easy-connect/bin/easy-connect background-stop ftp
+```
+
+`background-start ssh|ftp` also starts the shared controller on demand.
+The developer command `serve ssh|ftp|both` continues to run in the foreground
+and stops its own services on Ctrl-C/SIGTERM.
 
 ### SSH public keys
 
@@ -326,45 +386,14 @@ during device diagnostics. This version does not encrypt secrets at rest.
 
 ## TODO
 
-### SDK, dependencies and release build
+### Remaining device acceptance
 
-- [x] Pin the B288 6.10 SDK archive and checksum, with an explicit verified download.
-- [x] Add a Linux ARM build/package job using real InkView headers and libraries.
-- [ ] Record the exact firmware versions used for validation. Verify the B288/softfp
-  configuration before deciding whether separate platform profiles are needed.
-- [ ] Check each executable's ELF interpreter, CPU/float ABI, required libraries
-  and symbol versions against the target firmware, including libc and InkView.
-- [x] Link the SDK's static ARM `libcrypto` into the controller and daemon adapters;
-  reject shared OpenSSL dependencies during the device build.
-- [ ] Centralize platform flags shared by CMake and dependency builds. Replace
-  hardcoded PB632 release names/metadata with platform profiles and a documented
-  list of validated model/firmware combinations.
-
-### Verse Pro and InkPad 4
-
-Neither model has been validated with Easy Connect. Matching screen dimensions
-in host tests does not establish firmware or binary compatibility.
-
-| Model | Portrait resolution | Remaining UI validation |
-| --- | --- | --- |
-| Verse Pro (standard, non-Color) | 1072 × 1448 | Verify rendering, touch and keyboard on hardware; exact dimensions already appear in host scaling tests |
-| InkPad 4 | 1404 × 1872 | Add an exact-resolution host regression, then verify rendering, touch and keyboard on hardware |
-
-- [ ] Collect each model's exact firmware version and diagnostics from a normal
-  app launch; establish the launch account, permissions, storage paths and PTY
-  availability. Keep PB632 firmware U632.6.11.2001 as a baseline validation target.
-- [ ] Check portrait layout and touch alignment on both models. Validate rotation
-  behavior and decide whether to lock portrait orientation or support reflow.
-- [ ] Verify SSH commands, interactive PTY shells, key/password/either access,
-  credential rotation and host-key/fingerprint persistence across app restarts.
-- [ ] Verify password and anonymous FTP, passive transfers, file ownership and
-  current-user permissions. Test optional privileged/chroot mode separately.
-- [ ] Verify kernel supervision support and session cleanup: independent daemon
-  Stop, partial-start rollback, background/exit, and unexpected process death.
-- [ ] Exercise Wi-Fi loss/reconnection, sleep/wake, cover events and USB mode;
-  confirm the expected service state and cleanup after each transition.
-- [ ] Record results per model and firmware, including logs and unresolved issues,
-  before marking a release as supported on that combination.
+The shared build records software evidence for the four pinned runtimes. Each
+reader still needs physical checks for touch and keyboard input, rotation,
+firmware scanner integration, launch account/permissions, SSH shell and PTY,
+password/key persistence, FTP ownership, independent service Stop, suspend,
+Wi-Fi reconnection, cover events and USB transitions. Record model, exact
+firmware and diagnostics; do not infer hardware support from an emulator result.
 
 ### Follow-up features
 

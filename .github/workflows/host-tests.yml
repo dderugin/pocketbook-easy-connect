@@ -11,4 +11,5 @@ jobs:
       - run: python3 tools/dependencies.py build
       - run: python3 tests/test_ssh.py build/easy-connect
       - run: python3 tests/test_ftp.py build/easy-connect
+      - run: python3 tests/test_background.py build/easy-connect
       - run: python3 tests/test_sessions.py build/ec-ui-test

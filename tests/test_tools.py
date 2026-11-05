@@ -14,6 +14,7 @@ import unittest
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / 'tools'))
 
 
 def load_tool(name):
@@ -204,13 +205,15 @@ class PackageTests(unittest.TestCase):
         self.tool.ROOT = self.root
         for directory in ('src', 'adapters', 'tools', 'tests', 'data', 'build',
                           'work/stage/bin', 'work/stage/licenses/dropbear',
-                          'work/stage/licenses/vsftpd', 'work/downloads', 'work/sdk', 'state', 'data/licenses'):
+                          'work/stage/licenses/vsftpd', 'work/downloads', 'work/sdk', 'state', 'data/licenses', 'config'):
             (self.root / directory).mkdir(parents=True, exist_ok=True)
         for directory in ('src', 'adapters', 'tools', 'tests'):
             (self.root / directory / 'source.txt').write_text(directory + ' source')
         for name in ('README.md', 'LICENSE', 'CMakeLists.txt'):
             (self.root / name).write_text(name)
         (self.root / 'sdk.json').write_text(json.dumps({'name': 'test-sdk', 'sha256': 'test'}))
+        profile = json.loads((ROOT / 'config/pocketbook.json').read_text())
+        (self.root / 'config/pocketbook.json').write_text(json.dumps(profile))
         (self.root / 'data/licenses/openssl.txt').write_text('OpenSSL license')
         (self.root / 'work/sdk/SDK-B288-6.10.7z').write_bytes(b'SDK ARCHIVE MUST NOT SHIP')
         (self.root / 'data/EasyConnect.app').write_text('#!/bin/sh\nexec application\n')
@@ -237,7 +240,14 @@ class PackageTests(unittest.TestCase):
             ('vsftpd', 'work/stage/bin'))}
         for path in self.binaries.values():
             path.write_bytes(header)
-        self.zip = self.root / 'dist/easy-connect-pb632-0.1.0.zip'
+        from source_metadata import source_metadata
+        self.report = {'status': 'passed', 'family': profile['family'], 'version': profile['version'],
+                       'profile': profile, 'source': source_metadata(self.root),
+                       'binaries': {name: hashlib.sha256(path.read_bytes()).hexdigest() for name, path in self.binaries.items()},
+                       'devices': {d['model']: {'status': 'passed'} for d in profile['devices']},
+                       'native_tests': {'status': 'passed'}}
+        (self.root / 'build/firmware-tests.json').write_text(json.dumps(self.report))
+        self.zip = self.root / ('dist/easy-connect-' + profile['family'] + '-' + profile['version'] + '.zip')
 
     def package(self):
         with mock.patch.object(sys, 'argv', ['package.py', '--build', str(self.root / 'build')]):
@@ -339,6 +349,14 @@ class PackageTests(unittest.TestCase):
         self.package()
         with zipfile.ZipFile(self.zip) as archive:
             self.assertNotIn('stale-secret', archive.namelist())
+
+    def test_missing_or_stale_firmware_checks_block_package(self):
+        for invalid in ({}, {**self.report, 'devices': {}}, {**self.report, 'binaries': {}},
+                        {**self.report, 'source': {}}, {**self.report, 'status': 'failed'}):
+            (self.root / 'build/firmware-tests.json').write_text(json.dumps(invalid))
+            with self.assertRaisesRegex(ValueError, 'shared-device verification'):
+                self.package()
+            self.assertFalse(self.zip.exists())
 
 
 if __name__ == '__main__':

@@ -12,10 +12,11 @@
 #ifdef __linux__
 #include <sys/prctl.h>
 #endif
-static char svg[131072], plain[32768];
+static char svg[2097152], plain[32768];
 static size_t used = 0, plain_used = 0;
 static const ifont *font;
 static int color = BLACK, closed = 0;
+static int displayed_y(int y);
 /* A top system panel shifts scanout and wraps bottom rows to the top. */
 static int panel_type = 2;
 static void (*keyboard_callback)(char *) = NULL;
@@ -61,8 +62,150 @@ int ScreenWidth(void) {
     return screen_dimension("EC_UI_WIDTH", UI_CANVAS_WIDTH);
 }
 
+const char *GetDeviceModel(void) {
+    const char *model = getenv("EC_UI_MODEL");
+    return model ? model : "PB632";
+}
+
+const char *GetSoftwareVersion(void) {
+    const char *firmware = getenv("EC_UI_FIRMWARE");
+    return firmware ? firmware : "U632.6.11.2001";
+}
+
+void Message(int icon, const char *title, const char *message, int timeout) {
+    (void)icon; (void)timeout;
+    printf("MESSAGE %s: %s\n", title, message);
+}
+
 int ScreenHeight(void) {
     return screen_dimension("EC_UI_HEIGHT", UI_CANVAS_HEIGHT);
+}
+
+static int theme_integer(const char *key, int fallback) {
+    const char *reference = getenv("EC_UI_THEME_REFERENCE");
+    if (reference) {
+        char path[4096], line[2048];
+        snprintf(path, sizeof path, "%s/theme.cfg", reference);
+        FILE *in = fopen(path, "r");
+        if (in) {
+            while (fgets(line, sizeof line, in)) {
+                char *p = line;
+                while (*p == ' ' || *p == '\t') ++p;
+                if (!strncmp(p, key, strlen(key)) && p[strlen(key)] == '=') {
+                    int value = (int)strtol(p + strlen(key) + 1, NULL, 0);
+                    fclose(in); return value;
+                }
+            }
+            fclose(in);
+        }
+    }
+    return fallback;
+}
+
+static int theme_scale(int value) {
+    int side = ScreenWidth() < ScreenHeight() ? ScreenWidth() : ScreenHeight();
+    return value * side / 1072;
+}
+
+int GetThemeInt(const char *name, int fallback) {
+    if (!strcmp(name, "application.caption.height")) fallback = theme_scale(105);
+    if (!strcmp(name, "application.caption.button.left.indent.horizontal")) fallback = 0;
+    if (!strcmp(name, "application.caption.button.right.indent.horizontal")) fallback = theme_scale(12);
+    return theme_integer(name, fallback);
+}
+
+int GetCaptionHeight(void) { return GetThemeInt("application.caption.height", 70); }
+
+ibitmap *GetResource(const char *name, const ibitmap *fallback) {
+    static const char *names[] = {"home", "refresh", "ci_diagnostic"};
+    static ibitmap *resources[3];
+    const char *missing = getenv("EC_UI_MISSING_RESOURCE");
+    if (missing && !strcmp(missing, name)) return (ibitmap *)fallback;
+    for (size_t i = 0; i < 3; ++i) {
+        if (strcmp(name, names[i])) continue;
+        if (resources[i]) return resources[i];
+        const char *reference = getenv("EC_UI_THEME_REFERENCE");
+        if (reference) {
+            char path[4096]; snprintf(path, sizeof path, "%s/%s.bitmap", reference, name);
+            FILE *in = fopen(path, "rb");
+            if (!in) return (ibitmap *)fallback;
+            if (fseek(in, 0, SEEK_END)) abort();
+            long size = ftell(in);
+            rewind(in);
+            if (size < 8 || size > 1024 * 1024) abort();
+            resources[i] = malloc((size_t)size);
+            if (!resources[i] || fread(resources[i], 1, (size_t)size, in) != (size_t)size) abort();
+            fclose(in);
+        } else {
+            int side = theme_scale(94);
+            size_t size = sizeof(ibitmap) + (size_t)side * (size_t)side;
+            resources[i] = malloc(size);
+            if (!resources[i]) abort();
+            resources[i]->width = resources[i]->height = (unsigned short)side;
+            resources[i]->depth = 8;
+            resources[i]->scanline = (unsigned short)side;
+            memset(resources[i]->data, 255, (size_t)side * (size_t)side);
+        }
+        return resources[i];
+    }
+    return (ibitmap *)fallback;
+}
+
+void DrawBitmap(int x, int y, const ibitmap *bitmap) {
+    const char *name = "unknown";
+    const char *names[] = {"home", "refresh", "ci_diagnostic"};
+    for (size_t i = 0; i < 3; ++i) if (GetResource(names[i], NULL) == bitmap) name = names[i];
+    append("<g data-resource=\"%s\" data-x=\"%d\" data-y=\"%d\" data-width=\"%d\" data-height=\"%d\">",
+           name, x, displayed_y(y), bitmap->width, bitmap->height);
+    if (bitmap->depth != 8) abort();
+    for (unsigned row = 0; row < bitmap->height; ++row) {
+        unsigned column = 0;
+        while (column < bitmap->width) {
+            unsigned start = column;
+            unsigned shade = bitmap->data[row * bitmap->scanline + column++];
+            while (column < bitmap->width && bitmap->data[row * bitmap->scanline + column] == shade) ++column;
+            if (shade != 255)
+                append("<rect x=\"%d\" y=\"%d\" width=\"%u\" height=\"1\" fill=\"rgb(%u,%u,%u)\"/>",
+                       x + (int)start, displayed_y(y + (int)row), column - start, shade, shade, shade);
+        }
+    }
+    append("</g>");
+}
+
+void DimArea(int x, int y, int w, int h, int value) {
+    append("<rect x=\"%d\" y=\"%d\" width=\"%d\" height=\"%d\" fill=\"rgb(%d,%d,%d)\" fill-opacity=\".6\"/>",
+           x, displayed_y(y), w, h, (value >> 16) & 255, (value >> 8) & 255, value & 255);
+}
+
+void DrawApplicationCaption(const char *caption, const irect *rect) {
+    int height = GetCaptionHeight();
+    int size = theme_scale(34);
+    const char *reference = getenv("EC_UI_THEME_REFERENCE");
+    if (reference) {
+        char path[4096], line[2048];
+        snprintf(path, sizeof path, "%s/theme.cfg", reference);
+        FILE *in = fopen(path, "r");
+        if (in) {
+            while (fgets(line, sizeof line, in))
+                if (!strncmp(line, "application.caption.font=", 25)) {
+                    char *comma = strchr(line, ',');
+                    if (comma) size = atoi(comma + 1);
+                }
+            fclose(in);
+        }
+    }
+    FillArea(0, 0, ScreenWidth(), height, WHITE);
+    FillArea(0, height - 1, ScreenWidth(), 1, BLACK);
+    char title[256]; snprintf(title, sizeof title, "%s", caption);
+    if (theme_integer("application.caption.text.uppercase", 1))
+        for (char *p = title; *p; ++p) if (*p >= 'a' && *p <= 'z') *p = (char)(*p - 'a' + 'A');
+    int count = snprintf(plain + plain_used, sizeof plain - plain_used, "%s\n", title);
+    if (count > 0 && (size_t)count < sizeof plain - plain_used) plain_used += (size_t)count;
+    append("<text data-theme-font=\"application.caption.font\" x=\"%d\" y=\"%d\" "
+           "font-family=\"Roboto,Arial,sans-serif\" font-size=\"%d\" font-weight=\"normal\" "
+           "text-anchor=\"middle\" dominant-baseline=\"central\" fill=\"black\">",
+           rect->x + rect->w / 2, displayed_y(rect->y + rect->h / 2), size);
+    escaped(title, strlen(title)); append("</text>");
 }
 
 ifont *OpenFont(const char *name, int size, int bold) {
@@ -135,7 +278,7 @@ char *DrawTextRect(int x, int y, int w, int h, const char *value, int flags) {
                 length = split;
             }
         }
-        append("<text x=\"%d\" y=\"%d\" font-family=\"DejaVu Sans,Arial,sans-serif\" "
+        append("<text x=\"%d\" y=\"%d\" font-family=\"Roboto,Arial,sans-serif\" "
                "font-size=\"%d\" fill=\"rgb(%d,%d,%d)\">",
                x, displayed_y(y + font->size + row * font->size * 5 / 4), font->size, (color >> 16) & 255,
                (color >> 8) & 255, color & 255);
@@ -159,6 +302,12 @@ void DrawRect(int x, int y, int w, int h, int value) {
 void FillArea(int x, int y, int w, int h, int value) {
     append("<rect x=\"%d\" y=\"%d\" width=\"%d\" height=\"%d\" fill=\"rgb(%d,%d,%d)\"/>", x, displayed_y(y), w,
            h, (value >> 16) & 255, (value >> 8) & 255, value & 255);
+}
+
+void DrawLine(int x1, int y1, int x2, int y2, int value) {
+    append("<line x1=\"%d\" y1=\"%d\" x2=\"%d\" y2=\"%d\" stroke=\"rgb(%d,%d,%d)\"/>",
+           x1, displayed_y(y1), x2, displayed_y(y2), (value >> 16) & 255,
+           (value >> 8) & 255, value & 255);
 }
 
 void SetClip(int x, int y, int w, int h) {
@@ -228,8 +377,21 @@ void InkViewMain(iv_handler handler) {
                 abort();
             }
             ui_rect bounds = ui_control_bounds(id);
-            int screen_x = (bounds.x + bounds.width / 2) * ScreenWidth() / UI_CANVAS_WIDTH;
-            int screen_y = (bounds.y + bounds.height / 2) * ScreenHeight() / UI_CANVAS_HEIGHT;
+            int screen_x, screen_y;
+            if (id == UI_EXIT || id == UI_REFRESH_LIBRARY || id == UI_SAVE_DIAGNOSTICS) {
+                int slot = GetResource("home", NULL)->width;
+                if (GetResource("refresh", NULL)->width > slot) slot = GetResource("refresh", NULL)->width;
+                if (GetResource("ci_diagnostic", NULL)->width > slot) slot = GetResource("ci_diagnostic", NULL)->width;
+                bounds = ui_toolbar_bounds(id, ScreenWidth(), GetCaptionHeight(), slot,
+                    GetThemeInt("application.caption.button.left.indent.horizontal",0),
+                    GetThemeInt("application.caption.button.right.indent.horizontal",0));
+                screen_x = bounds.x + bounds.width / 2;
+                screen_y = bounds.y + bounds.height / 2;
+            } else {
+                screen_x = (bounds.x + bounds.width / 2) * ScreenWidth() / UI_CANVAS_WIDTH;
+                screen_y = GetCaptionHeight() + (bounds.y + bounds.height / 2 - UI_BODY_TOP) *
+                           (ScreenHeight() - GetCaptionHeight()) / (UI_CANVAS_HEIGHT - UI_BODY_TOP);
+            }
             handler(EVT_POINTERUP, screen_x, screen_y);
         } else if (sscanf(command, "tap %d %d", &x, &y) == 2) {
             handler(EVT_POINTERUP, x, y);
@@ -293,6 +455,8 @@ void InkViewMain(iv_handler handler) {
             fclose(out);
         } else if (!strcmp(command, "quit")) {
             closed = 1;
+        } else if (!strcmp(command, "back")) {
+            handler(EVT_KEYPRESS, KEY_BACK, 0);
         }
         puts("UI_EVENT_DONE");
         fflush(stdout);

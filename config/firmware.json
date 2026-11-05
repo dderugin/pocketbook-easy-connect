@@ -1,0 +1,63 @@
+{
+  "schema": 1,
+  "devices": [
+    {
+      "id": "pb632",
+      "label": "Touch HD 3",
+      "model": "632",
+      "version": "6.11.2001",
+      "software_version": "U632.6.11.2001",
+      "retrieved_on": "2026-11-05",
+      "archive": {
+        "filename": "sw_20260901_U632_6.11.2001_user.zip",
+        "url": "https://download.pocketbook-int.com/fw/Yitoa/632/user/20260901/sw_20260901_U632_6.11.2001_user.zip",
+        "sha256": "e9fc183f4c281e1d12c9f184215f4c119dc2b1865fac8e1a7dfff69c54aa8fcc"
+      }
+    },
+    {
+      "id": "pb634",
+      "label": "Verse Pro",
+      "model": "634",
+      "version": "6.10.3425",
+      "software_version": "U634.6.10.3425",
+      "source_api": "https://pocketbook.ch/front-api/api/en-ch/product?product_id=2026",
+      "retrieved_on": "2026-11-05",
+      "archive": {
+        "filename": "sw_20260324_U634_6.10.3425_user.zip",
+        "url": "https://download.pocketbook-int.com/fw/Yitoa/634/user/20260324/sw_20260324_U634_6.10.3425_user.zip",
+        "sha256": "6a3e575d261ac8c531e70dd9edda0a8cf79bdab2f1243151132712fc2bd1be75"
+      },
+      "release_notes": "https://support.pocketbook-int.com/fw/634/u/6.10.3425/rn/ww/RN_PB_Verse_Pro_EN.pdf"
+    },
+    {
+      "id": "pb700",
+      "label": "Era",
+      "model": "700",
+      "version": "6.10.3209",
+      "software_version": "U700.6.10.3209",
+      "source_api": "https://pocketbook.ch/front-api/api/en-ch/product?product_id=1720",
+      "retrieved_on": "2026-11-05",
+      "archive": {
+        "filename": "sw_20260223_U700_6.10.3209_user.zip",
+        "url": "https://download.pocketbook-int.com/fw/Jezetek/700/user/20260223/sw_20260223_U700_6.10.3209_user.zip",
+        "sha256": "0aca28ae483ffda1aa7c068cddb93484863a2022c71d396b6e196936c56680b1"
+      },
+      "release_notes": "https://support.pocketbook-int.com/fw/700/u/6.10.3209/rn/ww/RN_PB_Era_EN.pdf"
+    },
+    {
+      "id": "pb743g",
+      "label": "InkPad 4",
+      "model": "743g",
+      "version": "6.11.1683",
+      "software_version": "U743g.6.11.1683",
+      "source_api": "https://pocketbook.ch/front-api/api/en-ch/product?product_id=1915",
+      "retrieved_on": "2026-11-05",
+      "archive": {
+        "filename": "sw_20260731_U743g_6.11.1683_user.zip",
+        "url": "https://download.pocketbook-int.com/fw/Yitoa/743g/user/20260731/sw_20260731_U743g_6.11.1683_user.zip",
+        "sha256": "6c42fba30c5b934ab1d665a119518533e02da98b152a8ce4b7455909544c4fb7"
+      },
+      "release_notes": "https://support.pocketbook-int.com/fw/743G/u/6.11.1683/rn/ww/RN_PB_InkPad_4_EN.pdf"
+    }
+  ]
+}

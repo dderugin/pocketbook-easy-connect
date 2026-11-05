@@ -8,6 +8,7 @@
 enum {
     UI_CANVAS_WIDTH = 720,
     UI_CANVAS_HEIGHT = 960,
+    UI_BODY_TOP = 80,
     UI_BODY_FONT_SIZE = 20,
     UI_SMALL_FONT_PERCENT = 80,
     UI_TITLE_FONT_PERCENT = 150,
@@ -71,6 +72,8 @@ typedef enum {
     UI_TEXT_COUNT
 } ui_text_id;
 
+ui_rect ui_toolbar_bounds(ui_control_id id, int screen_width, int caption_height,
+                          int slot_width, int left_indent, int right_indent);
 ui_rect ui_control_bounds(ui_control_id id);
 ui_rect ui_text_bounds(ui_text_id id);
 ui_control_id ui_control_named(const char *name);

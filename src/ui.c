@@ -1,5 +1,6 @@
 /* InkView event handling, settings edits, and daemon lifecycle. */
 #include "ui.h"
+#include "device.h"
 #include <arpa/inet.h>
 #include <errno.h>
 #include <ifaddrs.h>
@@ -12,6 +13,7 @@
 #include <unistd.h>
 
 static ui_app app = {.active_tab = UI_TAB_SSH, .fingerprint = "Created when SSH starts."};
+static bool rejected_device;
 
 static void keyboard_result(char *value);
 static void refresh_status(void);
@@ -284,7 +286,13 @@ static void start_selected_service(void) {
         begin_edit(UI_EDIT_PASSWORD);
         return;
     }
-    if (ec_start(&app.config, &app.services, ui_service_name(app.active_tab))) {
+    char controller[EC_PATH];
+    if (ec_path(controller, sizeof controller, app.config.root, "bin/easy-connect")) return;
+#ifdef EC_UI_TEST
+    const char *test_controller = getenv("EC_UI_CONTROLLER");
+    if (test_controller) snprintf(controller, sizeof controller, "%s", test_controller);
+#endif
+    if (ec_background_start(&app.config, &app.services, ui_service_name(app.active_tab), controller)) {
         notify(ec_last_error());
         return;
     }
@@ -298,7 +306,7 @@ static void stop_selected_service(void) {
     if (!ui_is_running(&app, app.active_tab)) {
         return;
     }
-    if (ec_stop(&app.config, &app.services, ui_service_name(app.active_tab))) {
+    if (ec_background_stop(&app.config, &app.services, ui_service_name(app.active_tab))) {
         notify(ec_last_error());
     } else {
         notify("Daemon stopped.");
@@ -316,10 +324,13 @@ static void save_diagnostics(void) {
         return;
     }
     ec_doctor(&app.config, out);
+    fprintf(out, "Device: %s\nFirmware: %s\nFirmware API: %u\nVersion: %s (%s)\n",
+            GetDeviceModel(), GetSoftwareVersion(), ec_firmware_api(GetSoftwareVersion()), ec_version(), ec_family());
     fprintf(out, "UI viewport: %d x %d\nUI screen: %d x %d\nUI panel type: %d\n",
             app.screen_width, app.screen_height, ScreenWidth(), ScreenHeight(), GetPanelType());
     fprintf(out, "Library refresh: %s\nLibrary scan log: %s/library-scan.log\n",
             app.library_refresh ? "running" : "idle", app.config.root);
+    fprintf(out, "Exit library scan log: %s/library-exit-scan.log\n", app.config.root);
     fclose(out);
     notify("Saved diagnostics.txt in the app folder.");
 }
@@ -410,12 +421,23 @@ static void handle_pointer_up(int screen_x, int screen_y) {
     if (app.editor.field != UI_EDIT_NONE) {
         return;
     }
-    ec_poll(&app.services);
-    int logical_x = screen_x * UI_CANVAS_WIDTH / app.screen_width;
-    int logical_y = screen_y * UI_CANVAS_HEIGHT / app.screen_height;
-    ui_control_id control = ui_hit_test(app.active_tab, &app.config, logical_x, logical_y);
+    (void)ec_background_poll(&app.config, &app.services);
+    ui_control_id control = UI_CONTROL_NONE;
+    if (screen_y < app.toolbar.height) {
+        const ui_control_id actions[] = {UI_EXIT, UI_REFRESH_LIBRARY, UI_SAVE_DIAGNOSTICS};
+        for (size_t i = 0; i < sizeof actions / sizeof actions[0]; ++i) {
+            ui_rect bounds = ui_toolbar_bounds(actions[i], app.screen_width, app.toolbar.height,
+                app.toolbar.slot_width, app.toolbar.left_indent, app.toolbar.right_indent);
+            if (ui_rect_contains(bounds, screen_x, screen_y)) control = actions[i];
+        }
+    } else {
+        int logical_x = screen_x * UI_CANVAS_WIDTH / app.screen_width;
+        int logical_y = UI_BODY_TOP + (screen_y - app.toolbar.height) *
+                        (UI_CANVAS_HEIGHT - UI_BODY_TOP) / (app.screen_height - app.toolbar.height);
+        control = ui_hit_test(app.active_tab, &app.config, logical_x, logical_y);
+    }
     if (!app.network_available && control != UI_SSH_TAB && control != UI_FTP_TAB &&
-        control != UI_EXIT && control != UI_SAVE_DIAGNOSTICS && control != UI_REFRESH_LIBRARY) {
+        control != UI_STOP && control != UI_EXIT && control != UI_SAVE_DIAGNOSTICS && control != UI_REFRESH_LIBRARY) {
         return;
     }
     activate_control(control);
@@ -428,7 +450,7 @@ static void refresh_status(void) {
     bool library_changed = poll_library();
     pid_t previous_ssh = app.services.ssh;
     pid_t previous_ftp = app.services.ftp;
-    ec_poll(&app.services);
+    (void)ec_background_poll(&app.config, &app.services);
     if (previous_ssh && !app.services.ssh) {
         set_notice(UI_TAB_SSH, "SSH exited. Check its log for details.");
     }
@@ -448,22 +470,16 @@ static void refresh_status(void) {
 
 static void enter_background(void) {
     app.foreground = false;
-    if (app.library_refresh || app.library_handoff) {
-        /* Preserve transfers while the firmware scanner owns the screen,
-         * including delayed hide events after the scanner has finished. */
-        SetHardTimer("easy-connect-status", refresh_status, UI_STATUS_REFRESH_MS);
-        return;
-    }
     ClearTimer(refresh_status);
-    ec_stop_all(&app.config, &app.services);
-    for (ui_tab tab = UI_TAB_SSH; tab < UI_TAB_COUNT; ++tab) {
-        set_notice(tab, "Connections stopped when the app left the foreground.");
-    }
+    /* The headless owner keeps listeners and their sessions alive. */
+    if (app.library_refresh || app.library_handoff)
+        SetHardTimer("easy-connect-status", refresh_status, UI_STATUS_REFRESH_MS);
 }
 
 static bool open_fonts(void) {
     int width_size = UI_BODY_FONT_SIZE * ScreenWidth() / UI_CANVAS_WIDTH;
-    int height_size = UI_BODY_FONT_SIZE * ScreenHeight() / UI_CANVAS_HEIGHT;
+    int height_size = UI_BODY_FONT_SIZE * (ScreenHeight() - app.toolbar.height) /
+                      (UI_CANVAS_HEIGHT - UI_BODY_TOP);
     int size = width_size < height_size ? width_size : height_size;
     app.fonts.body = OpenFont(DEFAULTFONT, size, 0);
     app.fonts.small = OpenFont(DEFAULTFONT, size * UI_SMALL_FONT_PERCENT / 100, 0);
@@ -483,16 +499,25 @@ static void close_font(ifont **font) {
 }
 
 static void close_application(void) {
+    static bool closed;
+    if (closed) return;
+    closed = true;
+    bool refresh_on_exit = app.services_open && !rejected_device;
     ClearTimer(refresh_status);
     ui_library_stop(&app);
     if (app.services_open) {
-        ec_services_close(&app.config, &app.services);
         app.services_open = false;
     }
     close_font(&app.fonts.body);
     close_font(&app.fonts.small);
     close_font(&app.fonts.title);
     clear_password_buffers();
+    if (refresh_on_exit) {
+        if (ui_library_on_exit(&app))
+            fprintf(stderr, "Exit library refresh: %s\n", ec_last_error());
+        else
+            fprintf(stderr, "Exit library refresh handed off; see library-exit-scan.log.\n");
+    }
 }
 
 static int handle_event(int type, int parameter1, int parameter2) {
@@ -509,12 +534,23 @@ static int handle_event(int type, int parameter1, int parameter2) {
     }
     switch (type) {
     case EVT_INIT:
+        fprintf(stderr, "Device: %s firmware: %s API: %u\n", GetDeviceModel(), GetSoftwareVersion(),
+                ec_firmware_api(GetSoftwareVersion()));
+        if (!ec_device_supported(GetDeviceModel(), GetSoftwareVersion())) {
+            rejected_device = true;
+            Message(ICON_WARNING, "Easy Connect", "Unknown model or unsupported firmware API. See the installation guide.", 3000);
+            CloseApp();
+            break;
+        }
         /* Full-screen layout: the system panel otherwise offsets scanout and
          * wraps bottom rows to the top after firmware refreshes. */
         SetPanelType(PANEL_DISABLED);
         app.screen_width = ScreenWidth();
         app.screen_height = ScreenHeight();
-        if (open_fonts()) {
+        if (!ui_prepare_toolbar(&app)) {
+            Message(ICON_WARNING, "Easy Connect", "The current theme is missing native toolbar resources.", 3000);
+            CloseApp();
+        } else if (open_fonts()) {
             update_fingerprint();
         }
         break;
@@ -526,6 +562,8 @@ static int handle_event(int type, int parameter1, int parameter2) {
         SetPanelType(PANEL_DISABLED);
         app.screen_width = ScreenWidth();
         app.screen_height = ScreenHeight();
+        if (!ui_prepare_toolbar(&app)) { CloseApp(); break; }
+        (void)ec_background_poll(&app.config, &app.services);
         app.foreground = true;
         app.library_handoff = false;
         poll_library();
@@ -539,6 +577,7 @@ static int handle_event(int type, int parameter1, int parameter2) {
     case EVT_ORIENTATION:
         app.screen_width = ScreenWidth();
         app.screen_height = ScreenHeight();
+        if (!ui_prepare_toolbar(&app)) { CloseApp(); break; }
         redraw();
         break;
     case EVT_POINTERUP:
@@ -570,7 +609,7 @@ static int handle_event(int type, int parameter1, int parameter2) {
 
 int main(void) {
     setvbuf(stderr, NULL, _IONBF, 0);
-    fprintf(stderr, "Easy Connect UI build %s %s pid=%ld\n", __DATE__, __TIME__, (long)getpid());
+    fprintf(stderr, "Easy Connect %s (%s) build %s %s pid=%ld\n", ec_version(), ec_family(), __DATE__, __TIME__, (long)getpid());
     umask(0077);
     const char *root = EC_DEFAULT_ROOT;
 #ifdef EC_UI_TEST
@@ -578,7 +617,7 @@ int main(void) {
         root = getenv("EC_UI_ROOT");
     }
 #endif
-    if (ec_config_load(&app.config, root) || ec_services_open(&app.config, &app.services)) {
+    if (ec_config_load(&app.config, root) || ec_background_poll(&app.config, &app.services)) {
         return 1;
     }
     app.services_open = true;
@@ -587,5 +626,5 @@ int main(void) {
     snprintf(app.ssh_user, sizeof app.ssh_user, "%s", user ? user->pw_name : "unknown");
     InkViewMain(handle_event);
     close_application();
-    return 0;
+    return rejected_device ? 1 : 0;
 }

@@ -1,32 +1,32 @@
-name: B288 ARM build
+name: Shared PocketBook ARM build
 on: [push, pull_request, workflow_dispatch]
 permissions:
   contents: read
 jobs:
-  b288:
+  shared-armv7:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - name: Install build tools
-        run: sudo apt-get update && sudo apt-get install -y build-essential cmake python3 libarchive-tools
+      - name: Install build and runtime-probe tools
+        run: sudo apt-get update && sudo apt-get install -y build-essential cmake python3 libarchive-tools libssl-dev openssh-client curl git qemu-user e2fsprogs squashfs-tools
+      - name: Fetch pinned emulator with process-supervision support
+        run: |
+          bash tools/fetch-qemu.sh "$RUNNER_TEMP/qemu-arm"
+          echo "EC_QEMU=$RUNNER_TEMP/qemu-arm" >> "$GITHUB_ENV"
       - uses: actions/cache@v4
         with:
-          path: work/sdk/SDK-B288-6.10.7z
-          key: b288-sdk-${{ hashFiles('sdk.json') }}
-      - name: Verify SDK archive
-        run: python3 tools/sdk.py fetch
-      - name: Extract SDK with Unix symlinks
-        run: |
-          bsdtar -xf work/sdk/SDK-B288-6.10.7z -C work/sdk
-      - name: Fetch daemon sources
-        run: python3 tools/dependencies.py fetch
-      - name: Cross-compile and package
-        run: bash tools/build-device.sh
+          path: |
+            work/sdk/SDK-B288-6.10.7z
+            work/downloads
+          key: easy-connect-shared-inputs-${{ hashFiles('sdk.json', 'dependencies.json', 'config/firmware.json') }}
+      - name: Build, exercise services and qualify all four firmware runtimes
+        run: bash tools/build-docker.sh
       - uses: actions/upload-artifact@v4
         with:
-          name: easy-connect-b288-development
+          name: easy-connect-pocketbook-armv7-softfp
           path: |
             dist/*.zip
             dist/*.sha256
-            build-device/arm-report.txt
+            work/build-device-shared/arm-report.txt
+            work/build-device-shared/firmware-tests.json
           if-no-files-found: error

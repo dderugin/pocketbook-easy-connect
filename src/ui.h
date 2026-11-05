@@ -24,6 +24,13 @@ typedef struct {
 } ui_fonts;
 
 typedef struct {
+    ibitmap *home;
+    ibitmap *refresh;
+    ibitmap *diagnostics;
+    int height, slot_width, left_indent, right_indent;
+} ui_toolbar;
+
+typedef struct {
     ui_edit_field field;
     ui_tab password_tab;
     char buffer[EC_PATH];
@@ -37,6 +44,7 @@ typedef struct {
     bool services_open;
     ui_tab active_tab;
     ui_fonts fonts;
+    ui_toolbar toolbar;
     ui_editor editor;
     char notices[UI_TAB_COUNT][UI_NOTICE_CAPACITY];
     char fingerprint[UI_FINGERPRINT_CAPACITY];
@@ -58,8 +66,11 @@ static inline bool ui_is_running(const ui_app *app, ui_tab tab) {
     return tab == UI_TAB_SSH ? app->services.ssh != 0 : app->services.ftp != 0;
 }
 
+bool ui_prepare_toolbar(ui_app *app);
 void ui_draw(const ui_app *app);
 int ui_library_start(ui_app *app);
+/* Start a bounded final scan without interrupting background services. */
+int ui_library_on_exit(ui_app *app);
 /* 0 while running/idle, 1 on completion, -1 on failure. */
 int ui_library_poll(ui_app *app);
 void ui_library_stop(ui_app *app);

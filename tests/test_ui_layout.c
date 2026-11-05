@@ -32,9 +32,17 @@ static void check_named_controls(void) {
         }
     }
     CHECK(ui_control_named("nonexistent") == UI_CONTROL_NONE);
+    CHECK(ui_control_named("home") == UI_EXIT);
     CHECK(ui_control_name(UI_CONTROL_NONE) == NULL);
     CHECK(ui_control_name(UI_CONTROL_COUNT) == NULL);
     CHECK(ui_control_bounds(UI_CONTROL_COUNT).width == 0);
+    ui_rect title = ui_text_bounds(UI_TEXT_TITLE);
+    for (int i = UI_SAVE_DIAGNOSTICS; i <= UI_EXIT; ++i) {
+        ui_rect button = ui_control_bounds((ui_control_id)i);
+        CHECK(button.y < 80 && button.y + button.height <= 80);
+        CHECK(button.width >= 64 && button.height >= 64);
+        CHECK(!rectangles_overlap(button, title));
+    }
 }
 
 static void check_text_regions(void) {
@@ -90,7 +98,25 @@ static void check_visibility_and_gaps(void) {
     CHECK(ui_hit_test(UI_TAB_SSH, &config, gap_x, left.y + left.height / 2) == UI_CONTROL_NONE);
 }
 
+static void check_native_toolbar(void) {
+    const int profiles[][3] = {{1072,105,94},{1264,122,110},{1404,135,122},
+                              {1448,105,94},{1680,122,110},{1872,135,122}};
+    for (size_t i = 0; i < sizeof profiles / sizeof profiles[0]; ++i) {
+        int width = profiles[i][0], height = profiles[i][1], slot = profiles[i][2];
+        ui_rect home = ui_toolbar_bounds(UI_EXIT,width,height,slot,0,12);
+        ui_rect refresh = ui_toolbar_bounds(UI_REFRESH_LIBRARY,width,height,slot,0,12);
+        ui_rect diagnostics = ui_toolbar_bounds(UI_SAVE_DIAGNOSTICS,width,height,slot,0,12);
+        CHECK(home.x == 0 && home.width == slot && home.height == height);
+        CHECK(diagnostics.x + diagnostics.width == width - 12);
+        CHECK(refresh.x + refresh.width == diagnostics.x);
+        CHECK(!rectangles_overlap(home,refresh));
+        CHECK(ui_rect_contains(home,home.x+slot/2,height/2));
+        CHECK(!ui_rect_contains(home,home.x+slot,height/2));
+    }
+}
+
 int main(void) {
+    check_native_toolbar();
     check_named_controls();
     check_text_regions();
     check_visibility_and_gaps();

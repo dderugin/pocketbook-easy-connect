@@ -1,4 +1,5 @@
 #include "ec.h"
+#include "device.h"
 #include <signal.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -12,6 +13,10 @@ static void stop(int signal_number) {
 }
 
 int main(int argc, char **argv) {
+    if (argc == 2 && !strcmp(argv[1], "--version")) {
+        printf("Easy Connect %s (%s)\n", ec_version(), ec_family());
+        return 0;
+    }
     umask(0077);
     const char *root = EC_DEFAULT_ROOT;
     int argument_index = 1;
@@ -34,6 +39,30 @@ int main(int argc, char **argv) {
     }
     if (!strcmp(command, "fingerprint") && argc == argument_index) {
         return ec_fingerprint(&config) != 0;
+    }
+    if (!strcmp(command, "background-controller") && argc == argument_index)
+        return ec_background_serve(&config);
+    if (!strcmp(command, "background-status") && argc == argument_index) {
+        ec_services remote;
+        if (ec_background_poll(&config, &remote)) return 1;
+        printf("ssh=%ld ftp=%ld owner=%ld runtime=%s\n", (long)remote.ssh, (long)remote.ftp, (long)remote.controller, config.runtime);
+        return 0;
+    }
+    if (!strcmp(command, "background-start") && argc == argument_index + 1) {
+        const char *name = argv[argument_index];
+        if (strcmp(name, "ssh") && strcmp(name, "ftp")) return 2;
+        char program[EC_PATH];
+        ec_services remote;
+        if (ec_path(program, sizeof program, config.root, "bin/easy-connect")) return 1;
+        return ec_background_start(&config, &remote, name, program) != 0;
+    }
+    if (!strcmp(command, "background-stop") && argc == argument_index + 1) {
+        const char *name = argv[argument_index];
+        if (strcmp(name, "ssh") && strcmp(name, "ftp") && strcmp(name, "both")) return 2;
+        ec_services remote;
+        if (strcmp(name, "ftp") && ec_background_stop(&config, &remote, "ssh")) return 1;
+        if (strcmp(name, "ssh") && ec_background_stop(&config, &remote, "ftp")) return 1;
+        return 0;
     }
     if (strcmp(command, "serve") || argc != argument_index + 1 ||
         (strcmp(argv[argument_index], "ssh") && strcmp(argv[argument_index], "ftp") &&

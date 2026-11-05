@@ -1,39 +1,92 @@
 #include "ui.h"
 #include <string.h>
 
-static int viewport_width, viewport_height;
+static int viewport_width, viewport_height, caption_height;
 
 static int screen_x(int logical_x) {
     return logical_x * viewport_width / UI_CANVAS_WIDTH;
 }
 
 static int screen_y(int logical_y) {
-    return logical_y * viewport_height / UI_CANVAS_HEIGHT;
+    return caption_height + (logical_y - UI_BODY_TOP) *
+           (viewport_height - caption_height) / (UI_CANVAS_HEIGHT - UI_BODY_TOP);
+}
+
+static int screen_height(int logical_height) {
+    return logical_height * (viewport_height - caption_height) /
+           (UI_CANVAS_HEIGHT - UI_BODY_TOP);
 }
 
 static void draw_text_in_rect(ui_rect bounds, const char *value, ifont *font, int color) {
     SetFont(font, color);
     DrawTextRect(screen_x(bounds.x), screen_y(bounds.y), screen_x(bounds.width),
-                 screen_y(bounds.height), value, ALIGN_LEFT);
+                 screen_height(bounds.height), value, ALIGN_LEFT);
 }
 
 static void draw_text(ui_text_id area, const char *value, ifont *font) {
     draw_text_in_rect(ui_text_bounds(area), value, font, BLACK);
 }
 
+bool ui_prepare_toolbar(ui_app *app) {
+    ui_toolbar *bar = &app->toolbar;
+    bar->home = GetResource("home", NULL);
+    bar->refresh = GetResource("refresh", NULL);
+    bar->diagnostics = GetResource("ci_diagnostic", NULL);
+    bar->height = GetCaptionHeight();
+    bar->left_indent = GetThemeInt("application.caption.button.left.indent.horizontal", 0);
+    bar->right_indent = GetThemeInt("application.caption.button.right.indent.horizontal", 0);
+    if (!bar->home || !bar->refresh || !bar->diagnostics || bar->height <= 0 ||
+        bar->height >= app->screen_height) return false;
+    bar->slot_width = bar->home->width;
+    if (bar->refresh->width > bar->slot_width) bar->slot_width = bar->refresh->width;
+    if (bar->diagnostics->width > bar->slot_width) bar->slot_width = bar->diagnostics->width;
+    int reserve = bar->right_indent + 2 * bar->slot_width;
+    if (bar->left_indent + bar->slot_width > reserve) reserve = bar->left_indent + bar->slot_width;
+    return bar->slot_width > 0 && bar->left_indent >= 0 && bar->right_indent >= 0 &&
+           2 * reserve < app->screen_width &&
+           bar->home->height <= bar->height && bar->refresh->height <= bar->height &&
+           bar->diagnostics->height <= bar->height;
+}
+
+static void draw_native_icon(const ui_app *app, ui_control_id id, const ibitmap *bitmap) {
+    const ui_toolbar *bar = &app->toolbar;
+    ui_rect bounds = ui_toolbar_bounds(id, app->screen_width, bar->height,
+                                       bar->slot_width, bar->left_indent, bar->right_indent);
+    int x = bounds.x + (bounds.width - bitmap->width) / 2;
+    int y = (bounds.height - bitmap->height) / 2;
+    DrawBitmap(x, y, bitmap);
+    if (id == UI_REFRESH_LIBRARY && app->library_refresh)
+        DimArea(x, y, bitmap->width, bitmap->height, WHITE);
+}
+
+static void draw_toolbar(const ui_app *app) {
+    const ui_toolbar *bar = &app->toolbar;
+    int reserve = bar->right_indent + 2 * bar->slot_width;
+    int left = bar->left_indent + bar->slot_width;
+    if (left > reserve) reserve = left;
+    /* The firmware owns the font face, weight, size, accessibility scaling,
+     * capitalization, vertical alignment, background and separator. */
+    irect title = {reserve, 0, app->screen_width - 2 * reserve, bar->height,
+                   ALIGN_CENTER | VALIGN_MIDDLE};
+    DrawApplicationCaption("Easy Connect", &title);
+    draw_native_icon(app, UI_EXIT, bar->home);
+    draw_native_icon(app, UI_REFRESH_LIBRARY, bar->refresh);
+    draw_native_icon(app, UI_SAVE_DIAGNOSTICS, bar->diagnostics);
+}
+
 static void draw_button(const ui_app *app, ui_control_id control, const char *label, bool selected,
                         bool enabled) {
     if (control != UI_SSH_TAB && control != UI_FTP_TAB &&
-        control != UI_EXIT && control != UI_SAVE_DIAGNOSTICS && control != UI_REFRESH_LIBRARY) {
+        control != UI_STOP && control != UI_EXIT && control != UI_SAVE_DIAGNOSTICS && control != UI_REFRESH_LIBRARY) {
         enabled = enabled && app->network_available;
     }
     ui_rect bounds = ui_control_bounds(control);
     if (selected) {
         FillArea(screen_x(bounds.x), screen_y(bounds.y), screen_x(bounds.width),
-                 screen_y(bounds.height), enabled ? BLACK : LGRAY);
+                 screen_height(bounds.height), enabled ? BLACK : LGRAY);
     } else {
         DrawRect(screen_x(bounds.x), screen_y(bounds.y), screen_x(bounds.width),
-                 screen_y(bounds.height), enabled ? BLACK : LGRAY);
+                 screen_height(bounds.height), enabled ? BLACK : LGRAY);
     }
 
     ui_rect label_bounds = {bounds.x + UI_BUTTON_TEXT_INSET_X, bounds.y + UI_BUTTON_TEXT_INSET_Y,
@@ -50,7 +103,7 @@ static void draw_header(const ui_app *app) {
     char line[EC_PATH + UI_FINGERPRINT_CAPACITY];
     bool running = ui_is_running(app, app->active_tab);
 
-    draw_text(UI_TEXT_TITLE, "Easy Connect", app->fonts.title);
+    draw_toolbar(app);
     snprintf(line, sizeof line, "Device address: %s", app->device_address);
     draw_text(UI_TEXT_ADDRESS, line, app->fonts.small);
     draw_button(app, UI_SSH_TAB, "SSH", app->active_tab == UI_TAB_SSH, true);
@@ -153,12 +206,8 @@ static void draw_footer(const ui_app *app) {
     if (!app->network_available && !*notice) {
         notice = "Connect to Wi-Fi in device settings. Waiting for an IP address...";
     }
-    draw_text(UI_TEXT_NOTICE, *notice ? notice : "Stop this daemon before changing its settings.",
+    draw_text(UI_TEXT_NOTICE, *notice ? notice : "Services keep running in the background. Use Stop to end connections.",
               app->fonts.small);
-    draw_button(app, UI_SAVE_DIAGNOSTICS, "Save diagnostics", false, true);
-    draw_button(app, UI_REFRESH_LIBRARY, app->library_refresh ? "Refreshing..." : "Refresh Library",
-                false, !app->library_refresh);
-    draw_button(app, UI_EXIT, "Exit", false, true);
 }
 
 void ui_draw(const ui_app *app) {
@@ -170,6 +219,7 @@ void ui_draw(const ui_app *app) {
     SetPanelType(PANEL_DISABLED);
     viewport_width = app->screen_width;
     viewport_height = app->screen_height;
+    caption_height = app->toolbar.height;
     SetCanvas(NULL);
     SetClip(0, 0, viewport_width, viewport_height);
     ClearScreen();

@@ -13,16 +13,14 @@ enum {
     COLUMN_MIDDLE = COLUMN_LEFT + THREE_COLUMN_WIDTH + THREE_COLUMN_GAP,
     COLUMN_RIGHT = COLUMN_MIDDLE + THREE_COLUMN_WIDTH + THREE_COLUMN_GAP,
     TWO_COLUMN_RIGHT = PAGE_MARGIN + TWO_COLUMN_WIDTH + TWO_COLUMN_GAP,
-    TAB_TOP = 110,
-    TAB_HEIGHT = 62,
+    TAB_TOP = 132,
+    TAB_HEIGHT = 56,
     SERVICE_BUTTON_TOP = 312,
     SERVICE_BUTTON_HEIGHT = 62,
     AUTH_ROW_TOP = 440,
     AUTH_ROW_HEIGHT = 52,
     PORT_ROW_TOP = 514,
-    PORT_ROW_HEIGHT = 54,
-    FOOTER_TOP = 900,
-    FOOTER_HEIGHT = 48
+    PORT_ROW_HEIGHT = 54
 };
 
 typedef enum { SCOPE_COMMON, SCOPE_SSH, SCOPE_FTP } control_scope;
@@ -80,17 +78,17 @@ static const control_definition controls[UI_CONTROL_COUNT] = {
                              {COLUMN_RIGHT, 688, THREE_COLUMN_WIDTH, PORT_ROW_HEIGHT},
                              SCOPE_FTP},
     [UI_SAVE_DIAGNOSTICS] = {"save-diagnostics",
-                             {COLUMN_LEFT, FOOTER_TOP, THREE_COLUMN_WIDTH, FOOTER_HEIGHT},
+                             {628, 8, 64, 64},
                              SCOPE_COMMON},
     [UI_REFRESH_LIBRARY] = {"refresh-library",
-                            {COLUMN_MIDDLE, FOOTER_TOP, THREE_COLUMN_WIDTH, FOOTER_HEIGHT},
+                            {548, 8, 64, 64},
                             SCOPE_COMMON},
-    [UI_EXIT] = {"exit", {COLUMN_RIGHT, FOOTER_TOP, THREE_COLUMN_WIDTH, FOOTER_HEIGHT}, SCOPE_COMMON}};
+    [UI_EXIT] = {"home", {16, 8, 64, 64}, SCOPE_COMMON}};
 
 /* Text-only regions do not participate in hit testing. */
 static const ui_rect text_regions[UI_TEXT_COUNT] = {
-    [UI_TEXT_TITLE] = {PAGE_MARGIN, 20, CONTENT_WIDTH, 45},
-    [UI_TEXT_ADDRESS] = {PAGE_MARGIN, 68, CONTENT_WIDTH, 32},
+    [UI_TEXT_TITLE] = {104, 20, 428, 45},
+    [UI_TEXT_ADDRESS] = {PAGE_MARGIN, 88, CONTENT_WIDTH, 32},
     [UI_TEXT_SERVICE_TITLE] = {PAGE_MARGIN, 198, 360, 40},
     [UI_TEXT_STATUS] = {472, 204, 224, 34},
     [UI_TEXT_CONNECTION] = {PAGE_MARGIN, 248, CONTENT_WIDTH, 48},
@@ -105,7 +103,21 @@ static const ui_rect text_regions[UI_TEXT_COUNT] = {
     [UI_TEXT_FTP_PASSWORD_HINT] = {PAGE_MARGIN, 764, CONTENT_WIDTH, 58},
     [UI_TEXT_FTP_ANONYMOUS_HINT] = {PAGE_MARGIN, 690, CONTENT_WIDTH, 70},
     [UI_TEXT_FTP_PERMISSIONS] = {PAGE_MARGIN, 828, CONTENT_WIDTH, 32},
-    [UI_TEXT_NOTICE] = {PAGE_MARGIN, 850, CONTENT_WIDTH, 40}};
+    [UI_TEXT_NOTICE] = {PAGE_MARGIN, 900, CONTENT_WIDTH, 48}};
+
+/* Toolbar geometry uses the firmware's physical pixels. Theme bitmaps are
+ * drawn at their native size, independently of body scaling and orientation. */
+ui_rect ui_toolbar_bounds(ui_control_id id, int screen_width, int caption_height,
+                          int slot_width, int left_indent, int right_indent) {
+    int x;
+    switch (id) {
+    case UI_EXIT: x = left_indent; break;
+    case UI_REFRESH_LIBRARY: x = screen_width - right_indent - 2 * slot_width; break;
+    case UI_SAVE_DIAGNOSTICS: x = screen_width - right_indent - slot_width; break;
+    default: return (ui_rect){0};
+    }
+    return (ui_rect){x, 0, slot_width, caption_height};
+}
 
 ui_rect ui_control_bounds(ui_control_id id) {
     if (id <= UI_CONTROL_NONE || id >= UI_CONTROL_COUNT) {
@@ -129,6 +141,8 @@ const char *ui_control_name(ui_control_id id) {
 }
 
 ui_control_id ui_control_named(const char *name) {
+    /* Preserve the old automation control name after replacing Exit with Home. */
+    if (!strcmp(name, "exit")) return UI_EXIT;
     for (ui_control_id id = UI_CONTROL_NONE + 1; id < UI_CONTROL_COUNT; ++id) {
         if (!strcmp(controls[id].name, name)) {
             return id;

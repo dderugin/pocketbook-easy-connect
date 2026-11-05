@@ -1,0 +1,58 @@
+{
+  "schema": 1,
+  "family": "pocketbook-armv7-softfp",
+  "devices": [
+    {
+      "model": "632",
+      "name": "Touch HD 3",
+      "dpi": 300,
+      "width": 1072,
+      "height": 1448,
+      "skin": "pb631fw5",
+      "firmware": "U632.6.11.2001",
+      "minimum_api": 610
+    },
+    {
+      "model": "634",
+      "name": "Verse Pro",
+      "dpi": 300,
+      "width": 1072,
+      "height": 1448,
+      "skin": "pb631fw5",
+      "firmware": "U634.6.10.3425",
+      "minimum_api": 610
+    },
+    {
+      "model": "700",
+      "name": "Era",
+      "dpi": 300,
+      "width": 1264,
+      "height": 1680,
+      "skin": "pb631fw5",
+      "firmware": "U700.6.10.3209",
+      "minimum_api": 610
+    },
+    {
+      "model": "743G",
+      "name": "InkPad 4",
+      "dpi": 300,
+      "width": 1404,
+      "height": 1872,
+      "skin": "pb631fw5",
+      "firmware": "U743g.6.11.1683",
+      "minimum_api": 610
+    }
+  ],
+  "firmware_policy": "known-model-compatible-api",
+  "application": "Easy Connect",
+  "version": "0.2.0",
+  "cpu_flags": [
+    "-mcpu=generic-armv7-a",
+    "-march=armv7-a",
+    "-mtune=cortex-a7",
+    "-mfpu=neon",
+    "-mfloat-abi=softfp",
+    "-DPLATFORM_FC"
+  ],
+  "sdk_baseline": "SDK-B288-6.10"
+}

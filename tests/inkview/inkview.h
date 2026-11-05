@@ -2,13 +2,18 @@
 #ifndef EC_TEST_INKVIEW_H
 #define EC_TEST_INKVIEW_H
 typedef struct { int size; } ifont;
+typedef struct { int x,y,w,h,flags; } irect;
+typedef struct { unsigned short width,height,depth,scanline; unsigned char data[]; } ibitmap;
 typedef struct icanvas_s icanvas;
 typedef int (*iv_handler)(int,int,int);
 #define BLACK 0
+#define ICON_WARNING 1
 #define DGRAY 0x555555
 #define LGRAY 0xaaaaaa
 #define WHITE 0xffffff
 #define ALIGN_LEFT 1
+#define ALIGN_CENTER 2
+#define VALIGN_MIDDLE 32
 #define PANEL_DISABLED 0
 #define DEFAULTFONT "test"
 #define SYSTEMSCANNER "/ebrmain/bin/scanner.app"
@@ -27,7 +32,16 @@ typedef int (*iv_handler)(int,int,int);
 #define EVT_ACTIVATE 38
 #define EVT_FOCUS 36
 #define EVT_FOREGROUND 151
+ibitmap *GetResource(const char *, const ibitmap *);
+int GetThemeInt(const char *,int);
+int GetCaptionHeight(void);
+void DrawApplicationCaption(const char *,const irect *);
+void DrawBitmap(int,int,const ibitmap *);
+void DimArea(int,int,int,int,int);
 int ScreenWidth(void);
+const char *GetDeviceModel(void);
+const char *GetSoftwareVersion(void);
+void Message(int, const char *, const char *, int);
 int ScreenHeight(void);
 ifont *OpenFont(const char *,int,int);
 void CloseFont(ifont *);
@@ -39,6 +53,7 @@ int GetPanelType(void);
 void SetClip(int,int,int,int);
 char *DrawTextRect(int,int,int,int,const char *,int);
 void DrawRect(int,int,int,int,int);
+void DrawLine(int,int,int,int,int);
 void FillArea(int,int,int,int,int);
 void FullUpdate(void);
 void OpenKeyboard(const char *,char *,int,int,void (*)(char *));
