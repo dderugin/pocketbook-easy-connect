@@ -205,10 +205,11 @@ class PackageTests(unittest.TestCase):
         self.tool.ROOT = self.root
         for directory in ('src', 'adapters', 'tools', 'tests', 'data', 'build',
                           'work/stage/bin', 'work/stage/licenses/dropbear',
-                          'work/stage/licenses/vsftpd', 'work/downloads', 'work/sdk', 'state', 'data/licenses', 'config'):
+                          'work/stage/licenses/vsftpd', 'work/downloads', 'work/sdk', 'state', 'data/licenses', 'config', 'docs'):
             (self.root / directory).mkdir(parents=True, exist_ok=True)
         for directory in ('src', 'adapters', 'tools', 'tests'):
             (self.root / directory / 'source.txt').write_text(directory + ' source')
+        (self.root / 'docs/screen.png').write_bytes(b'DOCUMENTATION IMAGE')
         for name in ('README.md', 'LICENSE', 'CMakeLists.txt'):
             (self.root / name).write_text(name)
         (self.root / 'sdk.json').write_text(json.dumps({'name': 'test-sdk', 'sha256': 'test'}))
@@ -260,6 +261,7 @@ class PackageTests(unittest.TestCase):
         expected.update(prefix + 'bin/' + name for name in self.binaries)
         with zipfile.ZipFile(self.zip) as archive:
             self.assertEqual(set(archive.namelist()), expected)
+            self.assertTrue(archive.comment.startswith(b'EC-PACKAGE-1\npocketbook-armv7-softfp\n'))
             self.assertIn(b'auth=password', archive.read(prefix + 'easy-connect.conf.default'))
             for path in expected - {prefix + 'easy-connect.conf.default'}:
                 self.assertEqual((archive.getinfo(path).external_attr >> 16) & 0o777, 0o755)

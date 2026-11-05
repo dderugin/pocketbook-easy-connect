@@ -50,10 +50,11 @@ class UpdateTests(unittest.TestCase):
         original=self.channel.read_text()
         for invalid in [original.replace('EC-OTA','CR3-OTA'),original.replace(FAMILY,'other-family'),original.replace('0.3.1','00.3.1'),original+'632 610\n',original+'634',original.replace('632 610','632 6110'),original.replace('632 610','632 +610'),original.replace('632 610','632 609'),original+'x'*17000,original+'\0hidden']:
             self.channel.write_text(invalid);self.run_driver('parse',expected=1)
-    def test_update_root_cannot_put_staging_inside_the_installation(self):
+    def test_normalized_update_root_keeps_staging_outside_the_installation(self):
         result=subprocess.run([str(BINARY),'stage',str(self.root)+'/',str(self.channel),'PB632','U632.6.11.1',str(self.zip)],capture_output=True,text=True,timeout=10)
-        self.assertEqual(result.returncode,1,result.stderr)
+        self.assertEqual(result.returncode,0,result.stderr)
         self.assertFalse((self.root/'-ota-new').exists())
+        self.assertTrue(Path(str(self.root)+'-ota-new/.ready').exists())
 
     def test_stored_and_deflated_archives(self):
         for compression in (zipfile.ZIP_STORED,zipfile.ZIP_DEFLATED):self.package(compression=compression);self.run_driver('archive')
