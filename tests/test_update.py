@@ -129,6 +129,16 @@ class UpdateTests(unittest.TestCase):
         launcher=self.directory/'launcher';launcher.write_text((PROJECT/'data/EasyConnect.app').read_text().replace('/mnt/ext1',str(self.storage)))
         result=subprocess.run(['sh',str(launcher)],capture_output=True,text=True,timeout=15)
         self.assertEqual(result.returncode,0,result.stderr);self.assertTrue((self.root/'bin/easy-connect.app').exists())
+    def test_launcher_finishes_interrupted_rollback_without_retrying_bad_update(self):
+        self.old_install()
+        rollback=Path(str(self.root)+'-ota-rollback');self.root.rename(rollback)
+        (rollback/'.ota-rollback-ready').write_text('ready\n')
+        stage=Path(str(self.root)+'-ota-new');stage.mkdir();(stage/'.ready').write_text('bad release')
+        launcher=self.directory/'launcher';launcher.write_text((PROJECT/'data/EasyConnect.app').read_text().replace('/mnt/ext1',str(self.storage)))
+        result=subprocess.run(['sh',str(launcher)],capture_output=True,text=True,timeout=15)
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertFalse((self.root/'.ota-rollback-ready').exists());self.assertFalse((stage/'.ready').exists())
+
     def test_https_requires_trusted_certificate_and_limits_downloads(self):
         cert=self.directory/'cert.pem';key=self.directory/'key.pem'
         subprocess.run(['openssl','req','-x509','-newkey','rsa:2048','-nodes','-keyout',str(key),'-out',str(cert),'-days','1','-subj','/CN=localhost','-addext','subjectAltName=DNS:localhost'],check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)

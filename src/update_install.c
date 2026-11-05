@@ -187,9 +187,10 @@ int ec_update_rollback(ec_config *config) {
     }
     if (child_path(marker, config->root, ".ota-rollback-ready"))
         goto done;
-    unlink(marker);
     if (!ec_update_paths(config, source, "new"))
         ec_update_remove(source);
+    sync();
+    unlink(marker);
     sync();
     result = 0;
 done:

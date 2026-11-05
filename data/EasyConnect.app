@@ -7,6 +7,9 @@ backup=/mnt/ext1/system/share/easy-connect-ota-old
 rollback=/mnt/ext1/system/share/easy-connect-ota-rollback
 if [ ! -d "$share" ] && [ -f "$rollback/.ota-rollback-ready" ]; then
     mv "$rollback" "$share" || exit 1
+fi
+if [ -f "$share/.ota-rollback-ready" ]; then
+    rm -f /mnt/ext1/system/share/easy-connect-ota-new/.ready
     rm -f "$share/.ota-rollback-ready"
 fi
 if [ ! -d "$share" ] && [ -d "$backup" ]; then
