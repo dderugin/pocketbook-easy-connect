@@ -62,6 +62,17 @@ class UITests(unittest.TestCase):
             self.assertFalse(text.exists())
             self.assertFalse((self.root / "state/password.hash").exists())
 
+    def test_version_and_update_check_remain_available_offline(self):
+        result = self.run_ui(['press version', 'dialog 1', 'press check-updates', 'dialog 1'], address='')
+        self.assertIn('DIALOG Version: Easy Connect 0.3.0', result.stdout)
+        self.assertIn('Connect to Wi-Fi in the reader settings', result.stdout)
+
+    def test_cancel_update_preserves_installation_and_clears_lock(self):
+        result = self.run_ui(['press check-updates', 'cancel-update', 'press version', 'dialog 1'])
+        self.assertIn('Checking for updates', result.stdout)
+        self.assertIn('DIALOG Version', result.stdout)
+        self.assertFalse(Path(str(self.root) + '-ota-download.zip').exists())
+
     def test_factory_install_prompts_for_password_without_missing_file_error(self):
         defaults = Path(__file__).resolve().parents[1] / 'data/easy-connect.conf.default'
         (self.root / 'easy-connect.conf.default').write_bytes(defaults.read_bytes())

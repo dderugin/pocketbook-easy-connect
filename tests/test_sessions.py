@@ -115,6 +115,23 @@ class SessionTests(unittest.TestCase):
         self.command('text ' + str(path))
         return path.read_text()
 
+    def test_staged_update_and_version_dialog_leave_background_connections_running(self):
+        self.start('ssh'); self.start('ftp')
+        stage=Path(str(self.root)+'-ota-new');stage.mkdir()
+        self.addCleanup(lambda: shutil.rmtree(stage,ignore_errors=True))
+        (stage/'.ready').write_text('EC-OTA-SHARED-1\npocketbook-armv7-softfp\n0.3.1\n'+'a'*64+'\n632 610\n')
+        with self.ftp() as ftp:
+            self.command('press version');self.command('dialog 1')
+            self.command('press check-updates');self.command('dialog 2')
+            ftp.storbinary('STOR after-later.txt',io.BytesIO(b'service preserved'))
+            self.ssh()
+            self.close_ui(stop=False);self.open_ui()
+            self.assertIn('Update ready',self.ui_text())
+            ftp.storbinary('STOR after-reopen.txt',io.BytesIO(b'still running'))
+            self.ssh()
+        self.assertFalse((self.root/'.ota-first-run').exists())
+        self.stop('ssh');self.stop('ftp')
+
     def test_stop_ssh_leaves_ftp_session_and_transfers_running(self):
         self.start('ssh'); self.start('ftp'); self.ssh()
         with self.ftp() as ftp:

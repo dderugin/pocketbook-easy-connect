@@ -5,7 +5,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: sudo apt-get update && sudo apt-get install -y cmake build-essential libssl-dev python3 openssh-client
+      - run: sudo apt-get update && sudo apt-get install -y cmake build-essential libssl-dev libcurl4-openssl-dev zlib1g-dev python3 openssh-client
       - run: cmake -S . -B build && cmake --build build && ctest --test-dir build --output-on-failure
       - run: python3 tools/dependencies.py fetch
       - run: python3 tools/dependencies.py build

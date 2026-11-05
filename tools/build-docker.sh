@@ -36,7 +36,7 @@ sys.path.insert(0,'tools')
 from source_metadata import source_metadata
 root=Path.cwd()
 (Path(os.environ['EC_HOST_BUILD'])/'host-tests.json').write_text(json.dumps({'status':'passed',
-    'source':source_metadata(root),'suites':['controller','core','tools','ui-layout','device-ui','shared-device','ssh','ftp','background','ui-sessions'],
+    'source':source_metadata(root),'suites':['controller','core','tools','ui-layout','device-ui','shared-device','updater','ssh','ftp','background','ui-sessions'],
     'user':'non-root'},indent=2)+'\n')
 REPORT
 archives="${EC_FIRMWARE_ARCHIVES:-$PWD/work/downloads}"

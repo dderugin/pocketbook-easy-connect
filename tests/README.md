@@ -52,3 +52,12 @@ rejection. A real SSH/FTP session test verifies the final scan runs while both
 listeners stay available and can read the last completed upload. Reopened UI
 checks cover status, locked settings, independent Stop and stopping offline. Native theme-resource selection, caption style and physical-pixel toolbar geometry
 checks cover the supported portrait and landscape screen sizes.
+
+Updater tests exercise the production C channel parser, HTTPS transfer and ZIP
+reader, exact runtime allowlist, CRC/SHA-256 checks, architecture/family/version/API
+rejection, staging without replacing the runtime, preservation of settings and
+host keys, the service ownership lock, the production launcher recovering a
+power-interrupted switch, and rollback through the old controller after failed
+execution. A local TLS server verifies trusted/untrusted certificates, size limits
+and rejection of HTTP redirects. UI tests cover offline Version/update actions
+and cancellation. Physical Wi-Fi/update/USB/power-loss acceptance remains pending.

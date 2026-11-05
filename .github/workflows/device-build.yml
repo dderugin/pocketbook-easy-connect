@@ -8,7 +8,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install build and runtime-probe tools
-        run: sudo apt-get update && sudo apt-get install -y build-essential cmake python3 libarchive-tools libssl-dev openssh-client curl git qemu-user e2fsprogs squashfs-tools
+        run: sudo apt-get update && sudo apt-get install -y build-essential cmake python3 libarchive-tools libssl-dev libcurl4-openssl-dev zlib1g-dev openssh-client curl git qemu-user e2fsprogs squashfs-tools
       - name: Fetch pinned emulator with process-supervision support
         run: |
           bash tools/fetch-qemu.sh "$RUNNER_TEMP/qemu-arm"

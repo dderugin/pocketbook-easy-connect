@@ -42,6 +42,7 @@ def main():
     shutil.copy2(ROOT / 'data/easy-connect.conf.default', share)
     shutil.copy2(ROOT / 'data/easy-connect.conf.example', share)
     shutil.copy2(ROOT / 'README.md', share)
+    shutil.copytree(ROOT / 'docs', share / 'docs')
     shutil.copy2(ROOT / 'LICENSE', share)
     shutil.copy2(ROOT / 'dependencies.json', share)
     shutil.copytree(ROOT / 'work/stage/licenses', share / 'licenses')
@@ -49,7 +50,7 @@ def main():
     # Distribute complete corresponding source, including upstream archives.
     source = share / 'source'
     source.mkdir()
-    for directory in ('src', 'adapters', 'tools', 'data', 'tests', 'config'):
+    for directory in ('src', 'adapters', 'tools', 'data', 'tests', 'config', 'docs'):
         shutil.copytree(ROOT / directory, source / directory,
                         ignore=shutil.ignore_patterns('__pycache__'))
     for name in ('CMakeLists.txt', 'dependencies.json', 'sdk.json', 'LICENSE', 'README.md'):
@@ -90,6 +91,8 @@ def main():
     with zipfile.ZipFile(dest, 'w', zipfile.ZIP_DEFLATED) as archive:
         for path in sorted(runtime):
             archive.write(path, path.relative_to(stage))
+        archive.comment = ('EC-PACKAGE-1\n' + profile['family'] + '\n' + profile['version'] + '\n' +
+            ''.join(d['model'] + ' ' + str(d['minimum_api']) + '\n' for d in profile['devices'])).encode()
     # Keep corresponding source, notices and build evidence off the reader.
     with zipfile.ZipFile(companion, 'w', zipfile.ZIP_DEFLATED) as archive:
         for path in sorted(share.rglob('*')):

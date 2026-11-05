@@ -45,7 +45,7 @@
   ],
   "firmware_policy": "known-model-compatible-api",
   "application": "Easy Connect",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "cpu_flags": [
     "-mcpu=generic-armv7-a",
     "-march=armv7-a",

@@ -1,5 +1,6 @@
 #include "ec.h"
 #include "device.h"
+#include "update.h"
 #include <signal.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -34,6 +35,10 @@ int main(int argc, char **argv) {
         return 1;
     }
     const char *command = argv[argument_index++];
+    if (!strcmp(command, "update-install") && argc == argument_index)
+        return ec_update_install(&config) != 0;
+    if (!strcmp(command, "update-rollback") && argc == argument_index)
+        return ec_update_rollback(&config) != 0;
     if (!strcmp(command, "doctor") && argc == argument_index) {
         return ec_doctor(&config, stdout) != 0;
     }

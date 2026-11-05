@@ -13,7 +13,7 @@ int main(void) {
     const char *invalid[] = {NULL, "", "6.11.1", "U743g.6.11", "U743g.6.11.x",
         "U743g.6.11.1 ", "U743g.999999999999.11.1", "U743g.6.111.1", "U743g.6.9.1"};
     for (unsigned i = 0; i < sizeof invalid / sizeof invalid[0]; ++i) assert(!ec_firmware_api(invalid[i]));
-    assert(!strcmp(ec_version(), "0.2.0"));
+    assert(!strcmp(ec_version(), "0.3.0"));
     assert(!strcmp(ec_family(), "pocketbook-armv7-softfp"));
     return 0;
 }

@@ -49,7 +49,18 @@ def functional_probes(device, paths, build, host_build, runtime, qemu, output):
              'ssh': ['test_key_only_and_password_rejection', 'test_password_only_and_key_rejection'],
              'ftp': ['test_roundtrip_and_file_owner', 'test_wrong_password_and_username_rejected',
                      'test_anonymous_mode_needs_no_password_file'],
-             'background': ['test_detached_controller_and_independent_explicit_stop']}
+             'background': ['test_detached_controller_and_independent_explicit_stop'],
+             'update': ['test_semver_numeric_and_invalid_versions',
+                        'test_compatible_models_and_newer_firmware_patches',
+                        'test_reject_malformed_channels_and_duplicate_models',
+                        'test_stored_and_deflated_archives',
+                        'test_checksum_damage_is_rejected',
+                        'test_exact_allowlist_blocks_traversal_extras_and_missing_files',
+                        'test_package_metadata_family_version_and_api_must_match',
+                        'test_symlinks_foreign_architecture_and_crc_are_rejected',
+                        'test_install_reverifies_staged_zip_and_preserves_every_user_file',
+                        'test_rollback_preserves_state_written_during_the_first_run',
+                        'test_https_requires_trusted_certificate_and_limits_downloads']}
     passed = []
     with tempfile.TemporaryDirectory(prefix='ec-firmware-probes-') as temporary:
         context = Path(temporary)
@@ -63,6 +74,8 @@ def functional_probes(device, paths, build, host_build, runtime, qemu, output):
         wrapper(core, build / 'ec-runtime-test', runtime, qemu)
         controller = context / 'controller-driver'
         wrapper(controller, paths['easy-connect'], runtime, qemu)
+        updater = context / 'update-driver'
+        wrapper(updater, build / 'ec-update-runtime-test', runtime, qemu)
         # Native controller harness supervises the actual ARM daemons through QEMU.
         # The separate ARM core probes exercise filesystem and password operations.
         for kind, selected in cases.items():
@@ -71,13 +84,16 @@ def functional_probes(device, paths, build, host_build, runtime, qemu, output):
             module = importlib.util.module_from_spec(spec)
             arguments = sys.argv
             try:
-                sys.argv = [str(filename), str(core if kind == 'core' else host_build / 'easy-connect')]
+                sys.argv = [str(filename), str(core if kind == 'core' else updater if kind == 'update' else host_build / 'easy-connect')]
                 spec.loader.exec_module(module)
             finally:
                 sys.argv = arguments
             if kind != 'core': module.ROOT = context
+            if kind == 'update':
+                module.CONTROLLER = controller
+                module.UI_BINARY = host_build / 'ec-ui-test'
             if kind == 'background': module.SERVER = controller
-            cls = getattr(module, {'core': 'CoreTests', 'ssh': 'SSHTests', 'ftp': 'FTPTests', 'background': 'BackgroundTests'}[kind])
+            cls = getattr(module, {'core': 'CoreTests', 'ssh': 'SSHTests', 'ftp': 'FTPTests', 'background': 'BackgroundTests', 'update': 'UpdateTests'}[kind])
             stream = io.StringIO()
             result = unittest.TextTestRunner(stream=stream, verbosity=2).run(unittest.TestSuite(cls(name) for name in selected))
             (output / (kind + '-tests.log')).write_text(stream.getvalue())
@@ -125,7 +141,7 @@ def main():
               'binaries': hashes(paths), 'native_tests': native, 'devices': {},
               'device_validation': 'not-performed',
               'limits': ['QEMU probes do not verify physical UI, scanner, Wi-Fi, suspend or USB behavior',
-                         'SSH/FTP probes use a native controller harness; background probes use the ARM controller and a native client on loopback']}
+                         'SSH/FTP probes use a native controller harness; background and update probes use ARM controllers on loopback; update UI callbacks use the native test adapter']}
     for name, path in paths.items():
         attributes = subprocess.check_output([str(readelf), '-A', str(path)], text=True)
         if 'VFPv4' in attributes or 'Fused-MAC' in attributes:

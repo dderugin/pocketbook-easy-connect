@@ -48,6 +48,8 @@ typedef enum {
     UI_SAVE_DIAGNOSTICS,
     UI_REFRESH_LIBRARY,
     UI_EXIT,
+    UI_CHECK_UPDATES,
+    UI_VERSION,
     UI_CONTROL_COUNT
 } ui_control_id;
 

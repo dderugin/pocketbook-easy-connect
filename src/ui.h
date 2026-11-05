@@ -53,6 +53,7 @@ typedef struct {
     bool ftp_rootless;
     bool network_available;
     bool foreground;
+    bool modal, restart_update;
     bool library_handoff;
     pid_t library_refresh;
     int screen_width, screen_height;
@@ -66,6 +67,13 @@ static inline bool ui_is_running(const ui_app *app, ui_tab tab) {
     return tab == UI_TAB_SSH ? app->services.ssh != 0 : app->services.ftp != 0;
 }
 
+void ui_update_check(ui_app *);
+void ui_update_version(ui_app *);
+void ui_update_poll(void);
+void ui_update_cancel(ui_app *);
+void ui_update_close(void);
+bool ui_update_active(void);
+bool ui_update_on_start(ui_app *);
 bool ui_prepare_toolbar(ui_app *app);
 void ui_draw(const ui_app *app);
 int ui_library_start(ui_app *app);

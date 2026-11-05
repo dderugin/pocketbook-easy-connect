@@ -21,6 +21,8 @@ static int displayed_y(int y);
 static int panel_type = 2;
 static void (*keyboard_callback)(char *) = NULL;
 static void (*timer_callback)(void) = NULL;
+static void (*dialog_callback)(int);
+static void (*progress_callback)(int);
 static char *keyboard_buffer;
 static int keyboard_size;
 
@@ -72,6 +74,15 @@ const char *GetSoftwareVersion(void) {
     return firmware ? firmware : "U632.6.11.2001";
 }
 
+void Dialog(int icon,const char *title,const char *text,const char *yes,const char *no,void (*callback)(int)) {
+    (void)icon;
+    printf("DIALOG %s: %s [%s/%s]\n",title,text,yes,no?no:"");dialog_callback=callback;
+}
+void OpenProgressbar(int icon,const char *title,const char *text,int percent,void (*callback)(int)) {
+    (void)icon;printf("PROGRESS %s: %s %d\n",title,text,percent);progress_callback=callback;
+}
+void UpdateProgressbar(const char *text,int percent){printf("PROGRESS %s %d\n",text,percent);}
+void CloseProgressbar(void){puts("PROGRESS closed");progress_callback=NULL;}
 void Message(int icon, const char *title, const char *message, int timeout) {
     (void)icon; (void)timeout;
     printf("MESSAGE %s: %s\n", title, message);
@@ -404,6 +415,10 @@ void InkViewMain(iv_handler handler) {
             void (*callback)(char *) = keyboard_callback;
             keyboard_callback = NULL;
             callback(NULL);
+        } else if (!strncmp(command,"dialog ",7) && dialog_callback) {
+            void (*callback)(int)=dialog_callback;dialog_callback=NULL;callback(atoi(command+7));
+        } else if (!strcmp(command,"cancel-update") && progress_callback) {
+            void (*callback)(int)=progress_callback;progress_callback=NULL;callback(0);
         } else if (!strcmp(command, "network")) {
             setenv("EC_UI_ADDRESS", "", 1);
         } else if (!strncmp(command, "network ", 8)) {

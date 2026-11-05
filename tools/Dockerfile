@@ -12,7 +12,7 @@ FROM --platform=${EC_BUILD_PLATFORM} tonistiigi/binfmt@sha256:400a4873b838d1b891
 
 FROM --platform=${EC_BUILD_PLATFORM} ubuntu:24.04@sha256:fe81560990fae86dc4743202b2cb4d3df98d0bcf949173cecef15ce1127ef852
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    build-essential ca-certificates cmake libarchive-tools libssl-dev \
+    build-essential ca-certificates cmake libarchive-tools libssl-dev libcurl4-openssl-dev zlib1g-dev \
     openssh-client python3 git curl qemu-user e2fsprogs squashfs-tools util-linux pkg-config \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=emulator /usr/bin/qemu-arm /usr/local/bin/qemu-arm

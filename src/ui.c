@@ -38,7 +38,7 @@ static bool read_device_address(char *out, size_t size) {
 }
 
 static void redraw(void) {
-    if (!app.foreground || app.editor.field != UI_EDIT_NONE) {
+    if (!app.foreground || app.modal || app.editor.field != UI_EDIT_NONE) {
         return;
     }
     app.network_available = read_device_address(app.device_address, sizeof app.device_address);
@@ -402,6 +402,12 @@ static void activate_control(ui_control_id control) {
     case UI_FTP_SET_PASSWORD:
         begin_edit(UI_EDIT_PASSWORD);
         break;
+    case UI_CHECK_UPDATES:
+        ui_update_check(&app);
+        break;
+    case UI_VERSION:
+        ui_update_version(&app);
+        break;
     case UI_SAVE_DIAGNOSTICS:
         save_diagnostics();
         break;
@@ -418,7 +424,7 @@ static void activate_control(ui_control_id control) {
 }
 
 static void handle_pointer_up(int screen_x, int screen_y) {
-    if (app.editor.field != UI_EDIT_NONE) {
+    if (app.modal || app.editor.field != UI_EDIT_NONE) {
         return;
     }
     (void)ec_background_poll(&app.config, &app.services);
@@ -437,7 +443,7 @@ static void handle_pointer_up(int screen_x, int screen_y) {
         control = ui_hit_test(app.active_tab, &app.config, logical_x, logical_y);
     }
     if (!app.network_available && control != UI_SSH_TAB && control != UI_FTP_TAB &&
-        control != UI_STOP && control != UI_EXIT && control != UI_SAVE_DIAGNOSTICS && control != UI_REFRESH_LIBRARY) {
+        control != UI_STOP && control != UI_EXIT && control != UI_SAVE_DIAGNOSTICS && control != UI_REFRESH_LIBRARY && control != UI_CHECK_UPDATES && control != UI_VERSION) {
         return;
     }
     activate_control(control);
@@ -447,6 +453,7 @@ static void handle_pointer_up(int screen_x, int screen_y) {
 }
 
 static void refresh_status(void) {
+    ui_update_poll();
     bool library_changed = poll_library();
     pid_t previous_ssh = app.services.ssh;
     pid_t previous_ftp = app.services.ftp;
@@ -464,16 +471,17 @@ static void refresh_status(void) {
         redraw();
     }
     if (app.foreground || app.library_refresh || app.library_handoff) {
-        SetHardTimer("easy-connect-status", refresh_status, UI_STATUS_REFRESH_MS);
+        SetHardTimer("easy-connect-status", refresh_status, ui_update_active() ? 100 : UI_STATUS_REFRESH_MS);
     }
 }
 
 static void enter_background(void) {
+    ui_update_cancel(&app);
     app.foreground = false;
     ClearTimer(refresh_status);
     /* The headless owner keeps listeners and their sessions alive. */
     if (app.library_refresh || app.library_handoff)
-        SetHardTimer("easy-connect-status", refresh_status, UI_STATUS_REFRESH_MS);
+        SetHardTimer("easy-connect-status", refresh_status, ui_update_active() ? 100 : UI_STATUS_REFRESH_MS);
 }
 
 static bool open_fonts(void) {
@@ -504,6 +512,7 @@ static void close_application(void) {
     closed = true;
     bool refresh_on_exit = app.services_open && !rejected_device;
     ClearTimer(refresh_status);
+    ui_update_close();
     ui_library_stop(&app);
     if (app.services_open) {
         app.services_open = false;
@@ -542,6 +551,7 @@ static int handle_event(int type, int parameter1, int parameter2) {
             CloseApp();
             break;
         }
+        if (ui_update_on_start(&app)) { CloseApp(); break; }
         /* Full-screen layout: the system panel otherwise offsets scanout and
          * wraps bottom rows to the top after firmware refreshes. */
         SetPanelType(PANEL_DISABLED);
@@ -569,7 +579,7 @@ static int handle_event(int type, int parameter1, int parameter2) {
         poll_library();
         redraw();
         ClearTimer(refresh_status);
-        SetHardTimer("easy-connect-status", refresh_status, UI_STATUS_REFRESH_MS);
+        SetHardTimer("easy-connect-status", refresh_status, ui_update_active() ? 100 : UI_STATUS_REFRESH_MS);
         break;
     case EVT_REPAINT:
         redraw();
@@ -590,7 +600,7 @@ static int handle_event(int type, int parameter1, int parameter2) {
         break;
     case EVT_HIDE:
         /* Opening InkView's keyboard also hides the application surface. */
-        if (app.editor.field == UI_EDIT_NONE) {
+        if (!app.modal && app.editor.field == UI_EDIT_NONE) {
             enter_background();
         }
         break;
@@ -626,5 +636,5 @@ int main(void) {
     snprintf(app.ssh_user, sizeof app.ssh_user, "%s", user ? user->pw_name : "unknown");
     InkViewMain(handle_event);
     close_application();
-    return rejected_device ? 1 : 0;
+    return rejected_device ? 1 : app.restart_update ? 75 : 0;
 }

@@ -8,6 +8,7 @@ typedef struct icanvas_s icanvas;
 typedef int (*iv_handler)(int,int,int);
 #define BLACK 0
 #define ICON_WARNING 1
+#define ICON_INFORMATION 2
 #define DGRAY 0x555555
 #define LGRAY 0xaaaaaa
 #define WHITE 0xffffff
@@ -41,6 +42,10 @@ void DimArea(int,int,int,int,int);
 int ScreenWidth(void);
 const char *GetDeviceModel(void);
 const char *GetSoftwareVersion(void);
+void Dialog(int,const char *,const char *,const char *,const char *,void (*)(int));
+void OpenProgressbar(int,const char *,const char *,int,void (*)(int));
+void UpdateProgressbar(const char *,int);
+void CloseProgressbar(void);
 void Message(int, const char *, const char *, int);
 int ScreenHeight(void);
 ifont *OpenFont(const char *,int,int);

@@ -6,7 +6,7 @@ Easy Connect remains independent of CoolReader.
 
 [Download and installation guide](https://pocketbook.nimbushub.eu/easy-connect.html) · [GitHub repository](https://github.com/dderugin/pocketbook-easy-connect)
 
-The shared package version is **0.2.0**. Known models use API-based firmware
+The shared package version is **0.3.0**. Known models use API-based firmware
 admission, matching the shared CoolReader policy: firmware patch/build numbers
 are not an exact-version whitelist. The latest known API level at or below the
 installed firmware is selected (6.10/6.11); unknown models and API levels below
@@ -25,6 +25,36 @@ Wi-Fi, suspend, USB and PTY availability still require testing on each reader.
 Earlier PB632 builds have limited physical SSH/FTP evidence, not validation of
 this new binary. Android and hard-float PocketBook variants require separate
 build families.
+
+## Wi-Fi updates
+
+Version 0.3.0 adds **Check for updates** and **Version** below the service settings
+in both tabs. Connect to Wi-Fi, choose Check for updates, and confirm Download
+when a newer compatible version is available. The download uses HTTPS with
+certificate verification; a SHA-256 check and package/model/API checks run before
+anything is installed. The stable channel compares numeric MAJOR.MINOR.PATCH
+versions and never offers a downgrade.
+
+Checking and downloading leave SSH, FTP and active connections running. After
+verification, choose **Restart now** to explicitly stop both services and install,
+or **Later** to keep them running. A staged update installs on a later launch
+when both services have stopped. Reopening the interface while services are
+running keeps the current runtime in place. Home, Back and ordinary app exit
+continue to leave services running. Closing/backgrounding during a transfer
+cancels it without replacing the installed app.
+
+The launcher switches a prepared copy into place, preserving configuration,
+password verifiers, SSH host keys, custom files and logs. It recovers an
+interrupted directory switch and uses the previous controller to roll back if
+the updated interface fails its first run. It does not restart services after an
+update. Save diagnostics and check `ui.log` if installation fails.
+
+**Install 0.3.0 over USB once** to obtain the updater and stable launcher; 0.2.x
+cannot update itself. Later releases use the shared Wi-Fi channel. The stable
+launcher remains in place during Wi-Fi updates; a release that needs a different
+bootstrap must explicitly require USB installation. The seven-file install ZIP
+stores its version/family/API registry in the ZIP comment, keeping metadata out
+of the reader's Library. Wi-Fi updates use the same release ZIP as USB installs.
 
 ## Screenshots and controls
 
@@ -73,7 +103,7 @@ runtime. They cannot establish the physical reader's kernel or account policy.
 ## Build and test on a computer
 
 Requirements: CMake 3.18+, C compiler, Make, Python 3, OpenSSL development files,
-and OpenSSH client/keygen for integration tests. No Python is needed on the reader.
+libcurl and zlib development files, and OpenSSH client/keygen for integration tests. No Python is needed on the reader.
 
 ```sh
 cmake -S . -B build
@@ -161,8 +191,8 @@ the launcher applies the firmware executable-stack compatibility setting.
 
 Outputs:
 
-- `dist/easy-connect-pocketbook-armv7-softfp-0.2.0.zip`
-- `dist/easy-connect-pocketbook-armv7-softfp-0.2.0-sources.zip`
+- `dist/easy-connect-pocketbook-armv7-softfp-0.3.0.zip`
+- `dist/easy-connect-pocketbook-armv7-softfp-0.3.0-sources.zip`
 - Their `.sha256` files.
 
 The install ZIP still contains only seven runtime files: the launcher, five

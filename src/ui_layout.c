@@ -83,7 +83,9 @@ static const control_definition controls[UI_CONTROL_COUNT] = {
     [UI_REFRESH_LIBRARY] = {"refresh-library",
                             {548, 8, 64, 64},
                             SCOPE_COMMON},
-    [UI_EXIT] = {"home", {16, 8, 64, 64}, SCOPE_COMMON}};
+    [UI_EXIT] = {"home", {16, 8, 64, 64}, SCOPE_COMMON},
+    [UI_CHECK_UPDATES] = {"check-updates", {PAGE_MARGIN, 866, TWO_COLUMN_WIDTH, 40}, SCOPE_COMMON},
+    [UI_VERSION] = {"version", {TWO_COLUMN_RIGHT, 866, TWO_COLUMN_WIDTH, 40}, SCOPE_COMMON}};
 
 /* Text-only regions do not participate in hit testing. */
 static const ui_rect text_regions[UI_TEXT_COUNT] = {
@@ -103,7 +105,7 @@ static const ui_rect text_regions[UI_TEXT_COUNT] = {
     [UI_TEXT_FTP_PASSWORD_HINT] = {PAGE_MARGIN, 764, CONTENT_WIDTH, 58},
     [UI_TEXT_FTP_ANONYMOUS_HINT] = {PAGE_MARGIN, 690, CONTENT_WIDTH, 70},
     [UI_TEXT_FTP_PERMISSIONS] = {PAGE_MARGIN, 828, CONTENT_WIDTH, 32},
-    [UI_TEXT_NOTICE] = {PAGE_MARGIN, 900, CONTENT_WIDTH, 48}};
+    [UI_TEXT_NOTICE] = {PAGE_MARGIN, 916, CONTENT_WIDTH, 36}};
 
 /* Toolbar geometry uses the firmware's physical pixels. Theme bitmaps are
  * drawn at their native size, independently of body scaling and orientation. */

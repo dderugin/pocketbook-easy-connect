@@ -77,7 +77,7 @@ static void draw_toolbar(const ui_app *app) {
 static void draw_button(const ui_app *app, ui_control_id control, const char *label, bool selected,
                         bool enabled) {
     if (control != UI_SSH_TAB && control != UI_FTP_TAB &&
-        control != UI_STOP && control != UI_EXIT && control != UI_SAVE_DIAGNOSTICS && control != UI_REFRESH_LIBRARY) {
+        control != UI_STOP && control != UI_EXIT && control != UI_SAVE_DIAGNOSTICS && control != UI_REFRESH_LIBRARY && control != UI_CHECK_UPDATES && control != UI_VERSION) {
         enabled = enabled && app->network_available;
     }
     ui_rect bounds = ui_control_bounds(control);
@@ -202,6 +202,8 @@ static void draw_ftp_settings(const ui_app *app) {
 }
 
 static void draw_footer(const ui_app *app) {
+    draw_button(app, UI_CHECK_UPDATES, "Check for updates", false, true);
+    draw_button(app, UI_VERSION, "Version", false, true);
     const char *notice = app->notices[app->active_tab];
     if (!app->network_available && !*notice) {
         notice = "Connect to Wi-Fi in device settings. Waiting for an IP address...";
@@ -211,7 +213,7 @@ static void draw_footer(const ui_app *app) {
 }
 
 void ui_draw(const ui_app *app) {
-    if (app->editor.field != UI_EDIT_NONE || !app->fonts.body) {
+    if (app->modal || app->editor.field != UI_EDIT_NONE || !app->fonts.body) {
         return;
     }
     /* Firmware overlays can restore the system panel between frames. Disable
