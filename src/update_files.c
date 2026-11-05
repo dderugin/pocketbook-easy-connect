@@ -51,12 +51,21 @@ int ec_update_remove(const char *path) {
     int result = 0;
     struct dirent *e;
     char child[EC_PATH];
-    while ((e = readdir(d)))
+    for (;;) {
+        errno = 0;
+        e = readdir(d);
+        if (!e) {
+            if (errno)
+                result = -1;
+            break;
+        }
         if (strcmp(e->d_name, ".") && strcmp(e->d_name, "..")) {
             if (ec_path(child, sizeof child, path, e->d_name) || ec_update_remove(child))
                 result = -1;
         }
-    closedir(d);
+    }
+    if (closedir(d))
+        result = -1;
     return result ? result : rmdir(path);
 }
 int ec_update_write(const char *path, const void *data, size_t size) {
@@ -161,12 +170,21 @@ int ec_update_copy(const char *source, const char *target) {
         int result = 0;
         struct dirent *e;
         char a[EC_PATH], b[EC_PATH];
-        while (!result && (e = readdir(d)))
+        while (!result) {
+            errno = 0;
+            e = readdir(d);
+            if (!e) {
+                if (errno)
+                    result = -1;
+                break;
+            }
             if (strcmp(e->d_name, ".") && strcmp(e->d_name, "..")) {
                 result = ec_path(a, sizeof a, source, e->d_name) ||
                          ec_path(b, sizeof b, target, e->d_name) || ec_update_copy(a, b);
             }
-        closedir(d);
+        }
+        if (closedir(d))
+            result = -1;
         return result;
     }
     if (!S_ISREG(st.st_mode))
