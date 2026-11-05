@@ -26,6 +26,28 @@ Earlier PB632 builds have limited physical SSH/FTP evidence, not validation of
 this new binary. Android and hard-float PocketBook variants require separate
 build families.
 
+## Screenshots and controls
+
+UI previews rendered from the 0.2.0 application code with the native PocketBook
+toolbar and font. These show a Touch HD 3-sized layout; they are not
+physical-device captures. Layout and firmware styling can vary by reader.
+The address `192.0.2.1` and account `ec-preview` are examples; use the values
+shown on your device.
+
+| SSH tab | FTP tab |
+| --- | --- |
+| [![SSH tab with service controls, authentication choices and connection details](docs/screenshots/0.2.0/ssh.png)](docs/screenshots/0.2.0/ssh.png) | [![FTP tab with service controls, password access, ports and starting folder](docs/screenshots/0.2.0/ftp.png)](docs/screenshots/0.2.0/ftp.png) |
+
+The toolbar has **Home** on the left, then **Refresh Library** and **Save
+diagnostics** on the right. Home closes the interface and starts a Library
+refresh; running SSH and FTP services continue. Reopen Easy Connect and press
+**Stop** in the corresponding tab to end a service. The previews show both
+services stopped; SSH “Key or password” is an example selection.
+
+Select either image to view it at full size. See the
+[web manual](https://pocketbook.nimbushub.eu/easy-connect.html#screenshots)
+for installation and connection steps.
+
 ## Implemented
 
 - Portable C controller and diagnostics command.
