@@ -1,10 +1,40 @@
-# Easy Connect for PocketBook
+# Easy Connect — SSH and FTP servers for PocketBook
 
-One shared **ARMv7 Linux softfp** package for Touch HD 3, Verse Pro, Era and
-InkPad 4. The same application and service executables are used on every model;
-Easy Connect remains independent of CoolReader.
+Run an **SSH server and FTP server on your PocketBook e-reader**. Transfer books
+and files over Wi-Fi from an FTP client, or use an SSH client for remote shell
+access. Easy Connect uses Dropbear and vsftpd, runs without root, and works
+independently of CoolReader.
 
-[Download and installation guide](https://pocketbook.nimbushub.eu/easy-connect.html) · [GitHub repository](https://github.com/dderugin/pocketbook-easy-connect)
+- **Wireless book transfers:** upload, download, rename and organize files with FTP.
+- **Remote shell access:** connect over SSH with a password or public key.
+- **Background services:** run SSH and FTP independently and keep them running
+  after closing the interface; reopen the app to stop either service.
+- **Library refresh and Wi-Fi updates:** rescan books after transfers and check
+  for verified application updates from the reader.
+
+[Download and installation guide](https://pocketbook.nimbushub.eu/easy-connect.html) · [Latest release](https://github.com/dderugin/pocketbook-easy-connect/releases/latest) · [Report an issue](https://github.com/dderugin/pocketbook-easy-connect/issues)
+
+## Quick start
+
+1. Download the shared install ZIP from the guide. For an upgrade, stop both
+   services and close Easy Connect before replacing files over USB.
+2. Merge `applications` and `system` into the reader's USB storage root, safely
+   eject, connect to Wi-Fi, and open **Applications → EasyConnect**.
+3. Choose SSH or FTP, set its password and press **Start**. Use the username and
+   address displayed in that tab. Default ports are **2222 for SSH** and **2121 for FTP**.
+4. Connect from a client on your computer. After transferring books, refresh the
+   Library in Easy Connect. Use **Stop** to end a service when finished.
+
+FTP is unencrypted. **SFTP, SCP and FTPS are not included.** See the guide's
+[SSH instructions](https://pocketbook.nimbushub.eu/easy-connect.html#ssh),
+[FTP instructions](https://pocketbook.nimbushub.eu/easy-connect.html#ftp) and
+[security notes](https://pocketbook.nimbushub.eu/easy-connect.html#security).
+
+## Supported readers
+
+One shared **ARMv7 Linux softfp** package serves Touch HD 3, Verse Pro, Era and
+InkPad 4. The same application and service executables are used on every qualified
+model. Other models and firmware families require qualification.
 
 The shared package version is **0.3.0**. Known models use API-based firmware
 admission, matching the shared CoolReader policy: firmware patch/build numbers
@@ -224,8 +254,8 @@ access enabled. It never includes saved `easy-connect.conf`, credentials or host
 keys, so upgrades preserve them. The app creates state and daemon configuration
 files as needed; missing credentials prompt for setup instead of being shipped as
 empty placeholder files. It does not modify CoolReader files or firmware system accounts.
-Services do not automatically start at boot. Keep the app in the foreground for
-this first version; Wi-Fi keepalive and suspend/USB event behavior need device validation.
+Services do not automatically start at boot. They can run with the interface closed;
+Wi-Fi keepalive and suspend/USB behavior still need physical-device validation.
 
 ### Device interface
 
