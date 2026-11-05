@@ -77,15 +77,11 @@ static const control_definition controls[UI_CONTROL_COUNT] = {
     [UI_FTP_SET_PASSWORD] = {"ftp-set-password",
                              {COLUMN_RIGHT, 688, THREE_COLUMN_WIDTH, PORT_ROW_HEIGHT},
                              SCOPE_FTP},
-    [UI_SAVE_DIAGNOSTICS] = {"save-diagnostics",
-                             {628, 8, 64, 64},
-                             SCOPE_COMMON},
-    [UI_REFRESH_LIBRARY] = {"refresh-library",
-                            {548, 8, 64, 64},
-                            SCOPE_COMMON},
-    [UI_EXIT] = {"home", {16, 8, 64, 64}, SCOPE_COMMON},
-    [UI_CHECK_UPDATES] = {"check-updates", {PAGE_MARGIN, 866, TWO_COLUMN_WIDTH, 40}, SCOPE_COMMON},
-    [UI_VERSION] = {"version", {TWO_COLUMN_RIGHT, 866, TWO_COLUMN_WIDTH, 40}, SCOPE_COMMON}};
+    [UI_SAVE_DIAGNOSTICS] = {"save-diagnostics", {0}, SCOPE_COMMON},
+    [UI_REFRESH_LIBRARY] = {"refresh-library", {0}, SCOPE_COMMON},
+    [UI_EXIT] = {"home", {0}, SCOPE_COMMON},
+    [UI_CHECK_UPDATES] = {"check-updates", {0}, SCOPE_COMMON},
+    [UI_VERSION] = {"version", {0}, SCOPE_COMMON}};
 
 /* Text-only regions do not participate in hit testing. */
 static const ui_rect text_regions[UI_TEXT_COUNT] = {
@@ -105,7 +101,7 @@ static const ui_rect text_regions[UI_TEXT_COUNT] = {
     [UI_TEXT_FTP_PASSWORD_HINT] = {PAGE_MARGIN, 764, CONTENT_WIDTH, 58},
     [UI_TEXT_FTP_ANONYMOUS_HINT] = {PAGE_MARGIN, 690, CONTENT_WIDTH, 70},
     [UI_TEXT_FTP_PERMISSIONS] = {PAGE_MARGIN, 828, CONTENT_WIDTH, 32},
-    [UI_TEXT_NOTICE] = {PAGE_MARGIN, 916, CONTENT_WIDTH, 36}};
+    [UI_TEXT_NOTICE] = {PAGE_MARGIN, 900, CONTENT_WIDTH, 48}};
 
 /* Toolbar geometry uses the firmware's physical pixels. Theme bitmaps are
  * drawn at their native size, independently of body scaling and orientation. */
@@ -114,17 +110,32 @@ ui_rect ui_toolbar_bounds(ui_control_id id, int screen_width, int caption_height
     int x;
     switch (id) {
     case UI_EXIT: x = left_indent; break;
-    case UI_REFRESH_LIBRARY: x = screen_width - right_indent - 2 * slot_width; break;
-    case UI_SAVE_DIAGNOSTICS: x = screen_width - right_indent - slot_width; break;
+    case UI_REFRESH_LIBRARY: x = screen_width - right_indent - 4 * slot_width; break;
+    case UI_SAVE_DIAGNOSTICS: x = screen_width - right_indent - 3 * slot_width; break;
+    case UI_CHECK_UPDATES: x = screen_width - right_indent - 2 * slot_width; break;
+    case UI_VERSION: x = screen_width - right_indent - slot_width; break;
     default: return (ui_rect){0};
     }
     return (ui_rect){x, 0, slot_width, caption_height};
+}
+
+bool ui_control_in_toolbar(ui_control_id id) {
+    return id >= UI_SAVE_DIAGNOSTICS && id <= UI_VERSION;
+}
+
+ui_rect ui_toolbar_title_bounds(int screen_width, int caption_height, int slot_width,
+                                 int left_indent, int right_indent) {
+    int reserve = right_indent + UI_TOOLBAR_RIGHT_BUTTONS * slot_width;
+    if (left_indent + slot_width > reserve) reserve = left_indent + slot_width;
+    return (ui_rect){reserve, 0, screen_width - 2 * reserve, caption_height};
 }
 
 ui_rect ui_control_bounds(ui_control_id id) {
     if (id <= UI_CONTROL_NONE || id >= UI_CONTROL_COUNT) {
         return (ui_rect){0};
     }
+    if (ui_control_in_toolbar(id))
+        return ui_toolbar_bounds(id, UI_CANVAS_WIDTH, UI_BODY_TOP, 64, 0, 8);
     return controls[id].bounds;
 }
 
@@ -132,6 +143,8 @@ ui_rect ui_text_bounds(ui_text_id id) {
     if (id < 0 || id >= UI_TEXT_COUNT) {
         return (ui_rect){0};
     }
+    if (id == UI_TEXT_TITLE)
+        return ui_toolbar_title_bounds(UI_CANVAS_WIDTH, UI_BODY_TOP, 64, 0, 8);
     return text_regions[id];
 }
 
@@ -178,7 +191,7 @@ bool ui_rect_contains(ui_rect rect, int x, int y) {
 
 ui_control_id ui_hit_test(ui_tab tab, const ec_config *config, int x, int y) {
     for (ui_control_id id = UI_CONTROL_NONE + 1; id < UI_CONTROL_COUNT; ++id) {
-        if (ui_control_visible(id, tab, config) && ui_rect_contains(controls[id].bounds, x, y)) {
+        if (ui_control_visible(id, tab, config) && ui_rect_contains(ui_control_bounds(id), x, y)) {
             return id;
         }
     }

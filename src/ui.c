@@ -430,7 +430,8 @@ static void handle_pointer_up(int screen_x, int screen_y) {
     (void)ec_background_poll(&app.config, &app.services);
     ui_control_id control = UI_CONTROL_NONE;
     if (screen_y < app.toolbar.height) {
-        const ui_control_id actions[] = {UI_EXIT, UI_REFRESH_LIBRARY, UI_SAVE_DIAGNOSTICS};
+        const ui_control_id actions[] = {UI_EXIT, UI_REFRESH_LIBRARY, UI_SAVE_DIAGNOSTICS,
+                                         UI_CHECK_UPDATES, UI_VERSION};
         for (size_t i = 0; i < sizeof actions / sizeof actions[0]; ++i) {
             ui_rect bounds = ui_toolbar_bounds(actions[i], app.screen_width, app.toolbar.height,
                 app.toolbar.slot_width, app.toolbar.left_indent, app.toolbar.right_indent);

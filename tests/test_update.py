@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 """Exercise real ZIP verification, HTTPS, installation, service locks and recovery."""
 from pathlib import Path
-import hashlib,http.server,os,socketserver,ssl,struct,subprocess,sys,tempfile,threading,time,unittest,zipfile
+import json,hashlib,http.server,os,socketserver,ssl,struct,subprocess,sys,tempfile,threading,time,unittest,zipfile
 BINARY=Path(sys.argv.pop(1)).resolve()
 CONTROLLER=BINARY.with_name('easy-connect')
 UI_BINARY=BINARY.with_name('ec-ui-test')
 PROJECT=Path(__file__).resolve().parents[1]
+CURRENT=json.loads((PROJECT/'config/pocketbook.json').read_text())['version']
+_version=[int(p) for p in CURRENT.split('.')];_version[-1]+=1
+NEXT='.'.join(map(str,_version))
 FAMILY='pocketbook-armv7-softfp'
 MODELS='632 610\n634 610\n700 610\n743G 610\n'
 NAMES=['applications/EasyConnect.app','system/share/easy-connect/easy-connect.conf.default']+['system/share/easy-connect/bin/'+n for n in ('easy-connect','easy-connect.app','dropbear','dropbearkey','vsftpd')]
@@ -18,7 +21,8 @@ class UpdateTests(unittest.TestCase):
         self.root=self.storage/'system/share/easy-connect';self.root.mkdir(parents=True)
         self.zip=self.directory/'update.zip';self.channel=self.directory/'channel.txt'
         self.package()
-    def package(self,*,version='0.3.1',family=FAMILY,models=MODELS,entries=None,compression=zipfile.ZIP_DEFLATED):
+    def package(self,*,version=None,family=FAMILY,models=MODELS,entries=None,compression=zipfile.ZIP_DEFLATED):
+        version=version or NEXT
         entries=entries if entries is not None else [(n,(PROJECT/'data/EasyConnect.app').read_bytes() if n.endswith('/EasyConnect.app') else b'auth=password\n' if n.endswith('.default') else elf()) for n in NAMES]
         with zipfile.ZipFile(self.zip,'w',compression) as archive:
             for name,data in entries:archive.writestr(name,data)
@@ -48,7 +52,7 @@ class UpdateTests(unittest.TestCase):
         self.run_driver('parse',model='PB1030',expected=1);self.run_driver('parse',firmware='U632.6.9.1',expected=1)
     def test_reject_malformed_channels_and_duplicate_models(self):
         original=self.channel.read_text()
-        for invalid in [original.replace('EC-OTA','CR3-OTA'),original.replace(FAMILY,'other-family'),original.replace('0.3.1','00.3.1'),original+'632 610\n',original+'634',original.replace('632 610','632 6110'),original.replace('632 610','632 +610'),original.replace('632 610','632 609'),original+'x'*17000,original+'\0hidden']:
+        for invalid in [original.replace('EC-OTA','CR3-OTA'),original.replace(FAMILY,'other-family'),original.replace(NEXT,'0'+NEXT),original+'632 610\n',original+'634',original.replace('632 610','632 6110'),original.replace('632 610','632 +610'),original.replace('632 610','632 609'),original+'x'*17000,original+'\0hidden']:
             self.channel.write_text(invalid);self.run_driver('parse',expected=1)
     def test_normalized_update_root_keeps_staging_outside_the_installation(self):
         result=subprocess.run([str(BINARY),'stage',str(self.root)+'/',str(self.channel),'PB632','U632.6.11.1',str(self.zip)],capture_output=True,text=True,timeout=10)
@@ -173,9 +177,9 @@ class UpdateTests(unittest.TestCase):
         ui=UI_BINARY
         result=subprocess.run([str(ui)],input='\n'.join(events)+'\n',capture_output=True,text=True,env=environment,timeout=15)
         self.assertEqual(result.returncode,0,result.stderr)
-        self.assertIn('Available: 0.3.1',result.stdout)
+        self.assertIn('Available: '+NEXT,result.stdout)
         self.assertIn('is verified and ready',result.stdout)
-        self.assertIn('Version: Easy Connect 0.3.0',result.stdout)
+        self.assertIn('Version: Easy Connect '+CURRENT,result.stdout)
         self.assertTrue(Path(str(self.root)+'-ota-new/.ready').exists())
         self.assertFalse((self.root/'.ota-first-run').exists())
         # Later defers installation; a subsequent idle launch hands off to the bootstrap.

@@ -64,7 +64,7 @@ class UITests(unittest.TestCase):
 
     def test_version_and_update_check_remain_available_offline(self):
         result = self.run_ui(['press version', 'dialog 1', 'press check-updates', 'dialog 1'], address='')
-        self.assertIn('DIALOG Version: Easy Connect 0.3.0', result.stdout)
+        self.assertIn('DIALOG Version: Easy Connect 0.3.1', result.stdout)
         self.assertIn('Connect to Wi-Fi in the reader settings', result.stdout)
 
     def test_cancel_update_preserves_installation_and_clears_lock(self):
@@ -304,7 +304,7 @@ class UITests(unittest.TestCase):
                 for snapshot in snapshots:
                     elements = list(ET.parse(snapshot).getroot().iter())
                     icons = [e for e in elements if e.attrib.get('data-resource')]
-                    self.assertEqual({e.attrib['data-resource'] for e in icons}, {'home','refresh','ci_diagnostic'})
+                    self.assertEqual({e.attrib['data-resource'] for e in icons}, {'home','refresh','ci_diagnostic','ci_search_for_updates','info'})
                     caption = [e for e in elements if e.attrib.get('data-theme-font')]
                     self.assertEqual(len(caption),1)
                     self.assertEqual(caption[0].attrib['data-theme-font'],'application.caption.font')
@@ -314,6 +314,21 @@ class UITests(unittest.TestCase):
                     positions.append([tuple(sorted(e.attrib.items())) for e in icons] +
                                      [tuple(sorted(caption[0].attrib.items()))])
                 self.assertTrue(all(p == positions[0] for p in positions))
+
+    def test_updates_and_version_are_only_topbar_controls(self):
+        import xml.etree.ElementTree as ET
+        for width,height in ((720,960),(1072,1448),(1264,1680),(1404,1872),(1448,1072)):
+            snapshot=self.root/'topbar.svg'
+            result=self.run_ui([f'snapshot {snapshot}','press version','dialog 1',
+                                'press check-updates','dialog 1'],width=width,height=height,address='')
+            self.assertIn('DIALOG Version:',result.stdout)
+            self.assertIn('Connect to Wi-Fi',result.stdout)
+            elements=list(ET.parse(snapshot).getroot().iter())
+            icons={e.attrib['data-resource']:e for e in elements if e.attrib.get('data-resource')}
+            self.assertEqual(len(icons),5)
+            self.assertNotIn('Check for updates',[e.text for e in elements if e.tag.endswith('text')])
+            self.assertNotIn('Version',[e.text for e in elements if e.tag.endswith('text')])
+            self.assertTrue(all(int(icon.attrib['data-y'])<height*.1 for icon in icons.values()))
 
     def test_offline_controls_are_blocked_then_enable_automatically(self):
         offline, online = self.root / 'offline.txt', self.root / 'online.txt'

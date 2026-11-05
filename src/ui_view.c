@@ -32,20 +32,25 @@ bool ui_prepare_toolbar(ui_app *app) {
     bar->home = GetResource("home", NULL);
     bar->refresh = GetResource("refresh", NULL);
     bar->diagnostics = GetResource("ci_diagnostic", NULL);
+    bar->updates = GetResource("ci_search_for_updates", NULL);
+    bar->version = GetResource("info", NULL);
     bar->height = GetCaptionHeight();
     bar->left_indent = GetThemeInt("application.caption.button.left.indent.horizontal", 0);
     bar->right_indent = GetThemeInt("application.caption.button.right.indent.horizontal", 0);
-    if (!bar->home || !bar->refresh || !bar->diagnostics || bar->height <= 0 ||
+    if (!bar->home || !bar->refresh || !bar->diagnostics || !bar->updates || !bar->version || bar->height <= 0 ||
         bar->height >= app->screen_height) return false;
     bar->slot_width = bar->home->width;
     if (bar->refresh->width > bar->slot_width) bar->slot_width = bar->refresh->width;
     if (bar->diagnostics->width > bar->slot_width) bar->slot_width = bar->diagnostics->width;
-    int reserve = bar->right_indent + 2 * bar->slot_width;
-    if (bar->left_indent + bar->slot_width > reserve) reserve = bar->left_indent + bar->slot_width;
+    if (bar->updates->width > bar->slot_width) bar->slot_width = bar->updates->width;
+    if (bar->version->width > bar->slot_width) bar->slot_width = bar->version->width;
+    ui_rect title = ui_toolbar_title_bounds(app->screen_width, bar->height, bar->slot_width,
+                                            bar->left_indent, bar->right_indent);
     return bar->slot_width > 0 && bar->left_indent >= 0 && bar->right_indent >= 0 &&
-           2 * reserve < app->screen_width &&
+           title.width > 0 &&
            bar->home->height <= bar->height && bar->refresh->height <= bar->height &&
-           bar->diagnostics->height <= bar->height;
+           bar->diagnostics->height <= bar->height && bar->updates->height <= bar->height &&
+           bar->version->height <= bar->height;
 }
 
 static void draw_native_icon(const ui_app *app, ui_control_id id, const ibitmap *bitmap) {
@@ -61,17 +66,16 @@ static void draw_native_icon(const ui_app *app, ui_control_id id, const ibitmap 
 
 static void draw_toolbar(const ui_app *app) {
     const ui_toolbar *bar = &app->toolbar;
-    int reserve = bar->right_indent + 2 * bar->slot_width;
-    int left = bar->left_indent + bar->slot_width;
-    if (left > reserve) reserve = left;
-    /* The firmware owns the font face, weight, size, accessibility scaling,
-     * capitalization, vertical alignment, background and separator. */
-    irect title = {reserve, 0, app->screen_width - 2 * reserve, bar->height,
-                   ALIGN_CENTER | VALIGN_MIDDLE};
+    ui_rect bounds = ui_toolbar_title_bounds(app->screen_width, bar->height, bar->slot_width,
+                                             bar->left_indent, bar->right_indent);
+    /* Keep the native title centered while reserving space for all four actions. */
+    irect title = {bounds.x, bounds.y, bounds.width, bounds.height, ALIGN_CENTER | VALIGN_MIDDLE};
     DrawApplicationCaption("Easy Connect", &title);
     draw_native_icon(app, UI_EXIT, bar->home);
     draw_native_icon(app, UI_REFRESH_LIBRARY, bar->refresh);
     draw_native_icon(app, UI_SAVE_DIAGNOSTICS, bar->diagnostics);
+    draw_native_icon(app, UI_CHECK_UPDATES, bar->updates);
+    draw_native_icon(app, UI_VERSION, bar->version);
 }
 
 static void draw_button(const ui_app *app, ui_control_id control, const char *label, bool selected,
@@ -202,8 +206,6 @@ static void draw_ftp_settings(const ui_app *app) {
 }
 
 static void draw_footer(const ui_app *app) {
-    draw_button(app, UI_CHECK_UPDATES, "Check for updates", false, true);
-    draw_button(app, UI_VERSION, "Version", false, true);
     const char *notice = app->notices[app->active_tab];
     if (!app->network_available && !*notice) {
         notice = "Connect to Wi-Fi in device settings. Waiting for an IP address...";

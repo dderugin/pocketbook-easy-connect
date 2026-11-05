@@ -6,7 +6,7 @@ import json
 import struct
 import zlib
 
-RESOURCE_NAMES = ('home', 'refresh', 'ci_diagnostic')
+RESOURCE_NAMES = ('home', 'refresh', 'ci_diagnostic', 'ci_search_for_updates', 'info')
 
 
 def unpack(blob, size, offset, packed):

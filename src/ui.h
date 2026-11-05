@@ -27,6 +27,8 @@ typedef struct {
     ibitmap *home;
     ibitmap *refresh;
     ibitmap *diagnostics;
+    ibitmap *updates;
+    ibitmap *version;
     int height, slot_width, left_indent, right_indent;
 } ui_toolbar;
 

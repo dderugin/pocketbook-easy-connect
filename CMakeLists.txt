@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.18)
-project(easy_connect VERSION 0.3.0 LANGUAGES C)
+project(easy_connect VERSION 0.3.1 LANGUAGES C)
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 option(EASY_CONNECT_POCKETBOOK "Build the InkView device interface" OFF)

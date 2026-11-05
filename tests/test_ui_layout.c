@@ -37,7 +37,7 @@ static void check_named_controls(void) {
     CHECK(ui_control_name(UI_CONTROL_COUNT) == NULL);
     CHECK(ui_control_bounds(UI_CONTROL_COUNT).width == 0);
     ui_rect title = ui_text_bounds(UI_TEXT_TITLE);
-    for (int i = UI_SAVE_DIAGNOSTICS; i <= UI_EXIT; ++i) {
+    for (int i = UI_SAVE_DIAGNOSTICS; i <= UI_VERSION; ++i) {
         ui_rect button = ui_control_bounds((ui_control_id)i);
         CHECK(button.y < 80 && button.y + button.height <= 80);
         CHECK(button.width >= 64 && button.height >= 64);
@@ -103,15 +103,23 @@ static void check_native_toolbar(void) {
                               {1448,105,94},{1680,122,110},{1872,135,122}};
     for (size_t i = 0; i < sizeof profiles / sizeof profiles[0]; ++i) {
         int width = profiles[i][0], height = profiles[i][1], slot = profiles[i][2];
-        ui_rect home = ui_toolbar_bounds(UI_EXIT,width,height,slot,0,12);
-        ui_rect refresh = ui_toolbar_bounds(UI_REFRESH_LIBRARY,width,height,slot,0,12);
-        ui_rect diagnostics = ui_toolbar_bounds(UI_SAVE_DIAGNOSTICS,width,height,slot,0,12);
-        CHECK(home.x == 0 && home.width == slot && home.height == height);
-        CHECK(diagnostics.x + diagnostics.width == width - 12);
-        CHECK(refresh.x + refresh.width == diagnostics.x);
-        CHECK(!rectangles_overlap(home,refresh));
-        CHECK(ui_rect_contains(home,home.x+slot/2,height/2));
-        CHECK(!ui_rect_contains(home,home.x+slot,height/2));
+        const ui_control_id controls[] = {UI_EXIT,UI_REFRESH_LIBRARY,UI_SAVE_DIAGNOSTICS,UI_CHECK_UPDATES,UI_VERSION};
+        ui_rect title=ui_toolbar_title_bounds(width,height,slot,0,12);
+        CHECK(title.width>0 && title.x+title.width/2==width/2);
+        for(size_t j=0;j<sizeof controls/sizeof controls[0];++j) {
+            ui_rect action=ui_toolbar_bounds(controls[j],width,height,slot,0,12);
+            CHECK(ui_control_in_toolbar(controls[j]));
+            CHECK(action.y==0 && action.height==height && action.width==slot);
+            CHECK(action.x>=0 && action.x+action.width<=width);
+            CHECK(!rectangles_overlap(action,title));
+            CHECK(ui_rect_contains(action,action.x+slot/2,height/2));
+            for(size_t k=j+1;k<sizeof controls/sizeof controls[0];++k)
+                CHECK(!rectangles_overlap(action,ui_toolbar_bounds(controls[k],width,height,slot,0,12)));
+        }
+        ui_rect updates=ui_toolbar_bounds(UI_CHECK_UPDATES,width,height,slot,0,12);
+        ui_rect version=ui_toolbar_bounds(UI_VERSION,width,height,slot,0,12);
+        CHECK(updates.x+updates.width==version.x);
+        CHECK(version.x+version.width==width-12);
     }
 }
 

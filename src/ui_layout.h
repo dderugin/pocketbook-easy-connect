@@ -15,6 +15,7 @@ enum {
     UI_BUTTON_TEXT_INSET_X = 12,
     UI_BUTTON_TEXT_INSET_Y = 12,
     UI_BUTTON_TEXT_VERTICAL_TRIM = 16,
+    UI_TOOLBAR_RIGHT_BUTTONS = 4,
     UI_STATUS_REFRESH_MS = 1000
 };
 
@@ -74,6 +75,9 @@ typedef enum {
     UI_TEXT_COUNT
 } ui_text_id;
 
+bool ui_control_in_toolbar(ui_control_id id);
+ui_rect ui_toolbar_title_bounds(int screen_width, int caption_height, int slot_width,
+                                 int left_indent, int right_indent);
 ui_rect ui_toolbar_bounds(ui_control_id id, int screen_width, int caption_height,
                           int slot_width, int left_indent, int right_indent);
 ui_rect ui_control_bounds(ui_control_id id);

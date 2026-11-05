@@ -2,6 +2,7 @@
 """Use the actual tab buttons against real local SSH and FTP daemons."""
 from contextlib import contextmanager
 from pathlib import Path
+import json
 import ftplib
 import io
 import os
@@ -19,6 +20,9 @@ from ui_test_support import wait_exit_scan
 
 ROOT=Path(__file__).resolve().parents[1]
 BINARY=Path(sys.argv.pop(1)).resolve()
+_next_version=list(map(int,json.loads((ROOT/'config/pocketbook.json').read_text())['version'].split('.')))
+_next_version[-1]+=1
+NEXT_VERSION='.'.join(map(str,_next_version))
 
 @unittest.skipIf(os.geteuid()==0,'run current-user session tests without root')
 class SessionTests(unittest.TestCase):
@@ -119,7 +123,7 @@ class SessionTests(unittest.TestCase):
         self.start('ssh'); self.start('ftp')
         stage=Path(str(self.root)+'-ota-new');stage.mkdir()
         self.addCleanup(lambda: shutil.rmtree(stage,ignore_errors=True))
-        (stage/'.ready').write_text('EC-OTA-SHARED-1\npocketbook-armv7-softfp\n0.3.1\n'+'a'*64+'\n632 610\n')
+        (stage/'.ready').write_text('EC-OTA-SHARED-1\npocketbook-armv7-softfp\n'+NEXT_VERSION+'\n'+'a'*64+'\n632 610\n')
         with self.ftp() as ftp:
             self.command('press version');self.command('dialog 1')
             self.command('press check-updates');self.command('dialog 2')

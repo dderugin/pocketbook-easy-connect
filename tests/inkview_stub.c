@@ -128,11 +128,11 @@ int GetThemeInt(const char *name, int fallback) {
 int GetCaptionHeight(void) { return GetThemeInt("application.caption.height", 70); }
 
 ibitmap *GetResource(const char *name, const ibitmap *fallback) {
-    static const char *names[] = {"home", "refresh", "ci_diagnostic"};
-    static ibitmap *resources[3];
+    static const char *names[] = {"home", "refresh", "ci_diagnostic", "ci_search_for_updates", "info"};
+    static ibitmap *resources[5];
     const char *missing = getenv("EC_UI_MISSING_RESOURCE");
     if (missing && !strcmp(missing, name)) return (ibitmap *)fallback;
-    for (size_t i = 0; i < 3; ++i) {
+    for (size_t i = 0; i < 5; ++i) {
         if (strcmp(name, names[i])) continue;
         if (resources[i]) return resources[i];
         const char *reference = getenv("EC_UI_THEME_REFERENCE");
@@ -164,8 +164,8 @@ ibitmap *GetResource(const char *name, const ibitmap *fallback) {
 
 void DrawBitmap(int x, int y, const ibitmap *bitmap) {
     const char *name = "unknown";
-    const char *names[] = {"home", "refresh", "ci_diagnostic"};
-    for (size_t i = 0; i < 3; ++i) if (GetResource(names[i], NULL) == bitmap) name = names[i];
+    const char *names[] = {"home", "refresh", "ci_diagnostic", "ci_search_for_updates", "info"};
+    for (size_t i = 0; i < 5; ++i) if (GetResource(names[i], NULL) == bitmap) name = names[i];
     append("<g data-resource=\"%s\" data-x=\"%d\" data-y=\"%d\" data-width=\"%d\" data-height=\"%d\">",
            name, x, displayed_y(y), bitmap->width, bitmap->height);
     if (bitmap->depth != 8) abort();
@@ -389,10 +389,12 @@ void InkViewMain(iv_handler handler) {
             }
             ui_rect bounds = ui_control_bounds(id);
             int screen_x, screen_y;
-            if (id == UI_EXIT || id == UI_REFRESH_LIBRARY || id == UI_SAVE_DIAGNOSTICS) {
+            if (ui_control_in_toolbar(id)) {
                 int slot = GetResource("home", NULL)->width;
                 if (GetResource("refresh", NULL)->width > slot) slot = GetResource("refresh", NULL)->width;
                 if (GetResource("ci_diagnostic", NULL)->width > slot) slot = GetResource("ci_diagnostic", NULL)->width;
+                if (GetResource("ci_search_for_updates", NULL)->width > slot) slot = GetResource("ci_search_for_updates", NULL)->width;
+                if (GetResource("info", NULL)->width > slot) slot = GetResource("info", NULL)->width;
                 bounds = ui_toolbar_bounds(id, ScreenWidth(), GetCaptionHeight(), slot,
                     GetThemeInt("application.caption.button.left.indent.horizontal",0),
                     GetThemeInt("application.caption.button.right.indent.horizontal",0));
