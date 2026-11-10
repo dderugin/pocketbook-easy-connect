@@ -12,7 +12,7 @@ independently of CoolReader.
 - **Library refresh and Wi-Fi updates:** rescan books after transfers and check
   for verified application updates from the reader.
 
-[Download and installation guide](https://pocketbook.nimbushub.eu/easy-connect.html) · [Latest release](https://github.com/dderugin/pocketbook-easy-connect/releases/latest) · [Report an issue](https://github.com/dderugin/pocketbook-easy-connect/issues)
+[Downloads](https://readertools.eu/easy-connect/downloads/) · [Installation](https://readertools.eu/easy-connect/installation/) · [Manual](https://readertools.eu/easy-connect/manual/) · [Latest release](https://github.com/dderugin/pocketbook-easy-connect/releases/latest) · [Report an issue](https://github.com/dderugin/pocketbook-easy-connect/issues)
 
 ## Quick start
 
@@ -26,9 +26,9 @@ independently of CoolReader.
    Library in Easy Connect. Use **Stop** to end a service when finished.
 
 FTP is unencrypted. **SFTP, SCP and FTPS are not included.** See the guide's
-[SSH instructions](https://pocketbook.nimbushub.eu/easy-connect.html#ssh),
-[FTP instructions](https://pocketbook.nimbushub.eu/easy-connect.html#ftp) and
-[security notes](https://pocketbook.nimbushub.eu/easy-connect.html#security).
+[SSH instructions](https://readertools.eu/easy-connect/manual/#ssh),
+[FTP instructions](https://readertools.eu/easy-connect/manual/#ftp) and
+[security notes](https://readertools.eu/easy-connect/manual/#security).
 
 ## Supported readers
 
@@ -105,7 +105,7 @@ refresh; running SSH and FTP services continue. Reopen Easy Connect and press
 services stopped; SSH “Key or password” is an example selection.
 
 Select either image to view it at full size. See the
-[web manual](https://pocketbook.nimbushub.eu/easy-connect.html#screenshots)
+[web manual](https://readertools.eu/easy-connect/manual/)
 for installation and connection steps.
 
 ## Implemented
