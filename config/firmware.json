@@ -58,6 +58,21 @@
         "sha256": "6c42fba30c5b934ab1d665a119518533e02da98b152a8ce4b7455909544c4fb7"
       },
       "release_notes": "https://support.pocketbook-int.com/fw/743G/u/6.11.1683/rn/ww/RN_PB_InkPad_4_EN.pdf"
+    },
+    {
+      "id": "pb743k3",
+      "label": "InkPad Color 3",
+      "model": "743k3",
+      "version": "6.10.2854",
+      "software_version": "U743k3.6.10.2854",
+      "source_api": "https://pocketbook.ch/front-api/api/en-ch/product?product_id=2256",
+      "retrieved_on": "2026-11-16",
+      "archive": {
+        "filename": "sw_20260105_U743k3_6.10.2854_user.zip",
+        "url": "https://download.pocketbook-int.com/fw/Yitoa/743k3/user/20260105/sw_20260105_U743k3_6.10.2854_user.zip",
+        "sha256": "769fb0ed98446fb134f6baf177504e1ab2e9552b2944f2a4ec55fab059d305cf"
+      },
+      "release_notes": "https://support.pocketbook-int.com/fw/743K3/u/6.10.2854/rn/ww/RN_PB_InkPad_Color_3_EN.pdf"
     }
   ]
 }

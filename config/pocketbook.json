@@ -41,6 +41,16 @@
       "skin": "pb631fw5",
       "firmware": "U743g.6.11.1683",
       "minimum_api": 610
+    },
+    {
+      "model": "743K3",
+      "name": "InkPad Color 3",
+      "dpi": 300,
+      "width": 1404,
+      "height": 1872,
+      "skin": "pb631fw5",
+      "firmware": "U743k3.6.10.2854",
+      "minimum_api": 610
     }
   ],
   "firmware_policy": "known-model-compatible-api",

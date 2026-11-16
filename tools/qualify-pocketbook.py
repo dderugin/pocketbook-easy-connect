@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check all five ARM executables and run isolated service/core probes on four firmware runtimes."""
+"""Check all five ARM executables and run isolated service/core probes on pinned firmware runtimes."""
 from pathlib import Path
 import argparse
 import hashlib

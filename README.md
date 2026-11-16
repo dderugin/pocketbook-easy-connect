@@ -32,8 +32,8 @@ FTP is unencrypted. **SFTP, SCP and FTPS are not included.** See the guide's
 
 ## Supported readers
 
-One shared **ARMv7 Linux softfp** package serves Touch HD 3, Verse Pro, Era and
-InkPad 4. The same application and service executables are used on every qualified
+One shared **ARMv7 Linux softfp** package targets Touch HD 3, Verse Pro, Era,
+InkPad 4 and InkPad Color 3. The same application and service executables are used on every qualified
 model. Other models and firmware families require qualification.
 
 The shared package version is **0.3.1**. Known models use API-based firmware
@@ -42,15 +42,17 @@ are not an exact-version whitelist. The latest known API level at or below the
 installed firmware is selected (6.10/6.11); unknown models and API levels below
 6.10 are rejected. Compatible softfp system libraries remain necessary.
 
-| Model | Firmware snapshot used for verification | Portrait size |
+| Model | Firmware snapshot for qualification | Portrait size |
 | --- | --- | --- |
 | Touch HD 3 / PB632 | U632.6.11.2001 | 1072 × 1448 |
 | Verse Pro / PB634 | U634.6.10.3425 | 1072 × 1448 |
 | Era / PB700 | U700.6.10.3209 | 1264 × 1680 |
 | InkPad 4 / PB743G | U743g.6.11.1683 | 1404 × 1872 |
+| InkPad Color 3 / PB743K3 | U743k3.6.10.2854 | 1404 × 1872 |
 
 These snapshots define the software checks, not a list of every compatible
-firmware build. Physical acceptance of this shared release, scanner behavior,
+firmware build. InkPad Color 3 runtime qualification and physical acceptance remain pending.
+Physical acceptance of this shared release, scanner behavior,
 Wi-Fi, suspend, USB and PTY availability still require testing on each reader.
 Earlier PB632 builds have limited physical SSH/FTP evidence, not validation of
 this new binary. Android and hard-float PocketBook variants require separate

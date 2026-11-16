@@ -47,7 +47,8 @@ class UITests(unittest.TestCase):
 
     def test_shared_models_accept_changed_firmware_build_numbers(self):
         for model, firmware in (("PB632", "U632.6.11.9999"), ("PocketBook 634", "U634.6.10.9999"),
-                                ("PB700", "U700.6.12.1"), ("PocketBook 743g (PB743g)", "U743G.6.11.9999")):
+                                ("PB700", "U700.6.12.1"), ("PocketBook 743g (PB743g)", "U743G.6.11.9999"),
+                                ("PB743K3", "U743k3.6.10.2854"), ("PocketBook 743k3 (PB743k3)", "U743k3.6.10.9999")):
             text = self.root / "shared.txt"
             result = self.run_ui([f"text {text}"], model=model, firmware=firmware)
             self.assertIn("SSH daemon", text.read_text())
@@ -55,7 +56,7 @@ class UITests(unittest.TestCase):
 
     def test_unknown_models_and_old_or_invalid_firmware_do_not_start_ui(self):
         for model, firmware in (("PB1030", "U1030.6.11.1"), ("PB743g", "U743g.6.9.1"),
-                                ("PB632", "invalid")):
+                                ("PB743K3", "U743k3.6.8.3671"), ("PB632", "invalid")):
             text = self.root / "rejected.txt"
             result = self.run_ui(["press start", f"text {text}"], model=model, firmware=firmware, expected=1)
             self.assertIn("Unknown model or unsupported firmware API", result.stdout)
