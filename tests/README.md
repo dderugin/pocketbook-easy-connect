@@ -24,6 +24,14 @@ policy; they do not prove that a binary runs on ARM. Dependency tests mock only
 downloads and use small local archives; real dependency builds and daemon tests
 run separately in CI.
 
+Wi-Fi UI checks cover the offline toolbar button in both tabs and scaled screens,
+airplane-mode handling and API call order, duplicate-tap suppression, overlay hide
+and background/resume, success, failure/retry, and delayed IP acquisition. Checks
+also cover the connected icon's dimmed state, ignored taps, a connection
+arriving before the next status tick, and enabling the button after connection loss.
+Session checks keep an FTP connection and both daemons active through the network overlay.
+Actual radio and saved-network/picker behavior require a physical reader.
+
 UI checks also cover repeated Home/task-switcher resumes without EVT_SHOW,
 including focus-only returns, drawing, edits, IP polling, toolbar icon position and
 daemon restart. Unrelated InkView helper children must survive background,

@@ -362,6 +362,34 @@ static bool poll_library(void) {
     return result != 0;
 }
 
+static int wifi_connect_finished(int result) {
+    if (!app.wifi_connecting || !app.services_open) return 0;
+    app.wifi_connecting = false;
+    app.modal = false;
+    for (ui_tab tab = UI_TAB_SSH; tab < UI_TAB_COUNT; ++tab) {
+        set_notice(tab, result == 0 ? "Wi-Fi connected."
+                                    : "Wi-Fi connection cancelled or failed. Tap Connect Wi-Fi to retry.");
+    }
+    redraw();
+    return 0;
+}
+
+static void connect_wifi(void) {
+    if (app.wifi_connecting) return;
+    /* Recheck at the tap: the connection may have changed since the last tick. */
+    app.network_available = read_device_address(app.device_address, sizeof app.device_address);
+    if (app.network_available) return;
+    app.wifi_connecting = true;
+    for (ui_tab tab = UI_TAB_SSH; tab < UI_TAB_COUNT; ++tab)
+        set_notice(tab, "Connecting to Wi-Fi...");
+    redraw();
+    /* The firmware may hide our surface while its network picker is open. */
+    app.modal = true;
+    if (IsFlightModeEnabled()) SetFlightMode(false);
+    WiFiPower(1);
+    NetConnectAsync(wifi_connect_finished);
+}
+
 static void activate_control(ui_control_id control) {
     switch (control) {
     case UI_SSH_TAB:
@@ -375,6 +403,9 @@ static void activate_control(ui_control_id control) {
         break;
     case UI_STOP:
         stop_selected_service();
+        break;
+    case UI_CONNECT_WIFI:
+        connect_wifi();
         break;
     case UI_SSH_KEYS:
     case UI_SSH_PASSWORD:
@@ -430,7 +461,7 @@ static void handle_pointer_up(int screen_x, int screen_y) {
     (void)ec_background_poll(&app.config, &app.services);
     ui_control_id control = UI_CONTROL_NONE;
     if (screen_y < app.toolbar.height) {
-        const ui_control_id actions[] = {UI_EXIT, UI_REFRESH_LIBRARY, UI_SAVE_DIAGNOSTICS,
+        const ui_control_id actions[] = {UI_EXIT, UI_CONNECT_WIFI, UI_REFRESH_LIBRARY, UI_SAVE_DIAGNOSTICS,
                                          UI_CHECK_UPDATES, UI_VERSION};
         for (size_t i = 0; i < sizeof actions / sizeof actions[0]; ++i) {
             ui_rect bounds = ui_toolbar_bounds(actions[i], app.screen_width, app.toolbar.height,
@@ -444,7 +475,7 @@ static void handle_pointer_up(int screen_x, int screen_y) {
         control = ui_hit_test(app.active_tab, &app.config, logical_x, logical_y);
     }
     if (!app.network_available && control != UI_SSH_TAB && control != UI_FTP_TAB &&
-        control != UI_STOP && control != UI_EXIT && control != UI_SAVE_DIAGNOSTICS && control != UI_REFRESH_LIBRARY && control != UI_CHECK_UPDATES && control != UI_VERSION) {
+        control != UI_CONNECT_WIFI && control != UI_STOP && control != UI_EXIT && control != UI_SAVE_DIAGNOSTICS && control != UI_REFRESH_LIBRARY && control != UI_CHECK_UPDATES && control != UI_VERSION) {
         return;
     }
     activate_control(control);
@@ -514,6 +545,7 @@ static void close_application(void) {
     bool refresh_on_exit = app.services_open && !rejected_device;
     ClearTimer(refresh_status);
     ui_update_close();
+    app.wifi_connecting = false;
     ui_library_stop(&app);
     if (app.services_open) {
         app.services_open = false;

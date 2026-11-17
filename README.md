@@ -19,7 +19,7 @@ independently of CoolReader.
 1. Download the shared install ZIP from the guide. For an upgrade, stop both
    services and close Easy Connect before replacing files over USB.
 2. Merge `applications` and `system` into the reader's USB storage root, safely
-   eject, connect to Wi-Fi, and open **Applications → EasyConnect**.
+   eject, and open **Applications → EasyConnect**. Tap the **Wi-Fi** toolbar icon to connect.
 3. Choose SSH or FTP, set its password and press **Start**. Use the username and
    address displayed in that tab. Default ports are **2222 for SSH** and **2121 for FTP**.
 4. Connect from a client on your computer. After transferring books, refresh the
@@ -36,7 +36,7 @@ One shared **ARMv7 Linux softfp** package targets Touch HD 3, Verse Pro, Era,
 InkPad 4 and InkPad Color 3. The same application and service executables are used on every qualified
 model. Other models and firmware families require qualification.
 
-The shared package version is **0.3.1**. Known models use API-based firmware
+The shared package version is **0.3.2**. Known models use API-based firmware
 admission, matching the shared CoolReader policy: firmware patch/build numbers
 are not an exact-version whitelist. The latest known API level at or below the
 installed firmware is selected (6.10/6.11); unknown models and API levels below
@@ -60,7 +60,7 @@ build families.
 
 ## Wi-Fi updates
 
-The top bar in version 0.3.1 has native **Check for updates** (two circular arrows)
+The top bar in version 0.3.2 has native **Check for updates** (two circular arrows)
 and **Version** (information) icons in both tabs. Connect to Wi-Fi, choose Check for updates, and confirm Download
 when a newer compatible version is available. The download uses HTTPS with
 certificate verification; a SHA-256 check and package/model/API checks run before
@@ -90,7 +90,7 @@ of the reader's Library. Wi-Fi updates use the same release ZIP as USB installs.
 
 ## Screenshots and controls
 
-UI previews rendered from the 0.3.1 application code with the native PocketBook
+UI previews rendered from the 0.3.2 application code with the native PocketBook
 toolbar and font. These show a Touch HD 3-sized layout; they are not
 physical-device captures. Layout and firmware styling can vary by reader.
 The address `192.0.2.1` and account `ec-build` are examples; use the values
@@ -98,9 +98,9 @@ shown on your device.
 
 | SSH tab | FTP tab |
 | --- | --- |
-| [![SSH tab with service controls, authentication choices and connection details](docs/screenshots/0.3.1/ssh.png)](docs/screenshots/0.3.1/ssh.png) | [![FTP tab with service controls, password access, ports and starting folder](docs/screenshots/0.3.1/ftp.png)](docs/screenshots/0.3.1/ftp.png) |
+| [![SSH tab with service controls, authentication choices and connection details](docs/screenshots/0.3.2/ssh.png)](docs/screenshots/0.3.2/ssh.png) | [![FTP tab with service controls, password access, ports and starting folder](docs/screenshots/0.3.2/ftp.png)](docs/screenshots/0.3.2/ftp.png) |
 
-The toolbar has **Home** on the left, then **Refresh Library**, **Save diagnostics**,
+The toolbar has **Home** and **Connect Wi-Fi** on the left, then **Refresh Library**, **Save diagnostics**,
 **Check for updates** and **Version** on the right. Home closes the interface and starts a Library
 refresh; running SSH and FTP services continue. Reopen Easy Connect and press
 **Stop** in the corresponding tab to end a service. The previews show both
@@ -191,7 +191,7 @@ are executed without translating the host daemons. On ARM64 Docker engines,
 x86_64 binary translation must be enabled for the SDK compiler tools. The image
 provides their x86 libraries while keeping host tests and QEMU native.
 First setup downloads and
-verifies the pinned SDK, daemon sources and four firmware archives. No runtime
+verifies the pinned SDK, daemon sources and five firmware archives. No runtime
 firmware files or SDK archive are included in either release ZIP.
 
 To reuse existing local CoolReader input caches without making Easy Connect
@@ -214,8 +214,8 @@ this copies a build tool without registering or changing system emulation. The h
 `toolchain-touch-hd3.cmake` filename forwards to the shared toolchain.
 
 Before packaging, the pipeline runs native controller/UI/SSH/FTP/session tests,
-then checks all five ARM executables against all four firmware dependency
-closures and verifies the native theme has the caption style and all five toolbar icons. QEMU probes exercise password/filesystem operations, real SSH key and
+then checks all five ARM executables against all five firmware dependency
+closures and verifies the native theme has the caption style and all six toolbar icons. QEMU probes exercise password/filesystem operations, real SSH key and
 password login, authentication rejection, passive FTP transfers and anonymous
 FTP. The UI loader is checked separately; physical rendering and device events
 remain unverified. Static crypto symbols are hidden from firmware libraries, and
@@ -223,8 +223,8 @@ the launcher applies the firmware executable-stack compatibility setting.
 
 Outputs:
 
-- `dist/easy-connect-pocketbook-armv7-softfp-0.3.1.zip`
-- `dist/easy-connect-pocketbook-armv7-softfp-0.3.1-sources.zip`
+- `dist/easy-connect-pocketbook-armv7-softfp-0.3.2.zip`
+- `dist/easy-connect-pocketbook-armv7-softfp-0.3.2-sources.zip`
 - Their `.sha256` files.
 
 The install ZIP still contains only seven runtime files: the launcher, five
@@ -247,8 +247,7 @@ reader off and on before testing the installed build.
 3. SSH and FTP initially use separate application passwords. Press **Start** in
    each tab to set its password, then press **Start** again to run the service.
    For SSH key access, select **Public key** and import your `.pub` key over USB.
-4. Safely eject USB, connect the reader to Wi-Fi using its settings, then open
-   **Applications → EasyConnect**.
+4. Safely eject USB, open **Applications → EasyConnect**, and tap the **Wi-Fi** toolbar icon.
 5. Start the desired service. Closing or backgrounding the app leaves services running; reopen it and press **Stop** to end them.
 
 The ZIP includes factory configuration only, with no shared password or anonymous
@@ -273,8 +272,14 @@ folder, and the relevant username/password or anonymous-login details.
 The interface checks the device IP address every second. While no address is
 available, service buttons and settings are disabled and a Wi-Fi connection
 hint is shown. Controls enable automatically when an address appears; no manual
-refresh is required. Tabs, Stop and all five top-bar icons remain available offline.
-The **Home** icon on the left closes Easy Connect. The circular-arrow icon
+refresh is required. Tabs, Stop and all six top-bar icons remain available offline.
+The **Home** icon on the left closes Easy Connect. Beside it, the **Wi-Fi** icon
+disables airplane mode if needed, enables Wi-Fi, and connects to a saved network.
+If no saved network is available, the firmware opens its network picker. The
+connection runs asynchronously, reports success or failure, and updates the
+address automatically. The Wi-Fi icon is dimmed and disabled while connected,
+and becomes available again after the connection is lost. Running SSH/FTP services continue through the overlay.
+The circular-arrow icon
 refreshes the Library, and the native diagnostics icon saves a diagnostics report.
 
 Changes save immediately and survive app restarts. Configuration for a running
@@ -472,7 +477,7 @@ during device diagnostics. This version does not encrypt secrets at rest.
 
 ### Remaining device acceptance
 
-The shared build records software evidence for the four pinned runtimes. Each
+The shared build records software evidence for the five pinned runtimes. Each
 reader still needs physical checks for touch and keyboard input, rotation,
 firmware scanner integration, launch account/permissions, SSH shell and PTY,
 password/key persistence, FTP ownership, independent service Stop, suspend,

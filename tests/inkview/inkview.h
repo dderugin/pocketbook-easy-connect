@@ -1,6 +1,11 @@
 /* Test-only subset of InkView; never used in the device target. */
 #ifndef EC_TEST_INKVIEW_H
 #define EC_TEST_INKVIEW_H
+#include <stdbool.h>
+bool IsFlightModeEnabled(void);
+int SetFlightMode(bool);
+int WiFiPower(int);
+int NetConnectAsync(int (*)(int));
 typedef struct { int size; } ifont;
 typedef struct { int x,y,w,h,flags; } irect;
 typedef struct { unsigned short width,height,depth,scanline; unsigned char data[]; } ibitmap;

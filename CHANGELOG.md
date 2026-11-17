@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.2 — 2026-11-17
+
+- Add a native Wi-Fi button beside Home in the toolbar of both tabs, available offline.
+- Disable airplane mode when enabled, power on Wi-Fi, and ask the firmware to
+  reconnect to a saved network or show its network picker asynchronously.
+- Guard the firmware overlay against repeated taps, report connection results,
+  and refresh the device address and service controls after connecting.
+- Dim and disable the Wi-Fi toolbar button while connected; enable it again
+  after losing the connection and recheck connectivity when tapped.
+- Include upstream InkPad Color 3 support.
+
 ## 0.1.0 update — 2026-10-24
 
 - Add Refresh Library to both tabs, including offline use and during SSH/FTP transfers.

@@ -25,6 +25,7 @@ typedef struct {
 
 typedef struct {
     ibitmap *home;
+    ibitmap *wifi;
     ibitmap *refresh;
     ibitmap *diagnostics;
     ibitmap *updates;
@@ -54,6 +55,7 @@ typedef struct {
     char ssh_user[64];
     bool ftp_rootless;
     bool network_available;
+    bool wifi_connecting;
     bool foreground;
     bool modal, restart_update;
     bool library_handoff;

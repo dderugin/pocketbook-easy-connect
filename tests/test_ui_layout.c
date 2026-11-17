@@ -37,7 +37,7 @@ static void check_named_controls(void) {
     CHECK(ui_control_name(UI_CONTROL_COUNT) == NULL);
     CHECK(ui_control_bounds(UI_CONTROL_COUNT).width == 0);
     ui_rect title = ui_text_bounds(UI_TEXT_TITLE);
-    for (int i = UI_SAVE_DIAGNOSTICS; i <= UI_VERSION; ++i) {
+    for (int i = UI_CONNECT_WIFI; i <= UI_VERSION; ++i) {
         ui_rect button = ui_control_bounds((ui_control_id)i);
         CHECK(button.y < 80 && button.y + button.height <= 80);
         CHECK(button.width >= 64 && button.height >= 64);
@@ -46,6 +46,7 @@ static void check_named_controls(void) {
 }
 
 static void check_text_regions(void) {
+    CHECK(!rectangles_overlap(ui_text_bounds(UI_TEXT_ADDRESS), ui_control_bounds(UI_CONNECT_WIFI)));
     for (ui_text_id id = 0; id < UI_TEXT_COUNT; ++id) {
         ui_rect bounds = ui_text_bounds(id);
         CHECK(bounds.x >= 0 && bounds.y >= 0);
@@ -103,7 +104,7 @@ static void check_native_toolbar(void) {
                               {1448,105,94},{1680,122,110},{1872,135,122}};
     for (size_t i = 0; i < sizeof profiles / sizeof profiles[0]; ++i) {
         int width = profiles[i][0], height = profiles[i][1], slot = profiles[i][2];
-        const ui_control_id controls[] = {UI_EXIT,UI_REFRESH_LIBRARY,UI_SAVE_DIAGNOSTICS,UI_CHECK_UPDATES,UI_VERSION};
+        const ui_control_id controls[] = {UI_EXIT,UI_CONNECT_WIFI,UI_REFRESH_LIBRARY,UI_SAVE_DIAGNOSTICS,UI_CHECK_UPDATES,UI_VERSION};
         ui_rect title=ui_toolbar_title_bounds(width,height,slot,0,12);
         CHECK(title.width>0 && title.x+title.width/2==width/2);
         for(size_t j=0;j<sizeof controls/sizeof controls[0];++j) {

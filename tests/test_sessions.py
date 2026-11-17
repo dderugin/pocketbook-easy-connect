@@ -136,6 +136,24 @@ class SessionTests(unittest.TestCase):
         self.assertFalse((self.root/'.ota-first-run').exists())
         self.stop('ssh');self.stop('ftp')
 
+    def test_wifi_overlay_preserves_running_services_and_ftp_session(self):
+        self.start('ssh'); self.start('ftp')
+        with self.ftp() as ftp:
+            self.command('network')
+            self.command('press connect-wifi'); self.command('hide')
+            ftp.storbinary('STOR during-wifi.txt', io.BytesIO(b'connection preserved'))
+            self.ssh()
+            self.command('background'); self.command('wifi-result -1')
+            self.command('foreground')
+            self.assertIn('cancelled or failed', self.ui_text())
+            self.command('press connect-wifi'); self.command('network 192.0.2.1')
+            self.command('wifi-result 0')
+            ftp.storbinary('STOR after-wifi.txt', io.BytesIO(b'still connected'))
+            self.ssh()
+        self.assertEqual((self.share/'during-wifi.txt').read_bytes(), b'connection preserved')
+        self.assertEqual((self.share/'after-wifi.txt').read_bytes(), b'still connected')
+        self.stop('ssh'); self.stop('ftp')
+
     def test_stop_ssh_leaves_ftp_session_and_transfers_running(self):
         self.start('ssh'); self.start('ftp'); self.ssh()
         with self.ftp() as ftp:

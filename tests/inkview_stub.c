@@ -25,6 +25,27 @@ static void (*dialog_callback)(int);
 static void (*progress_callback)(int);
 static char *keyboard_buffer;
 static int keyboard_size;
+static bool flight_mode;
+static int (*wifi_callback)(int);
+
+bool IsFlightModeEnabled(void) {
+    printf("WIFI flight-mode=%d\n", flight_mode);
+    return flight_mode;
+}
+int SetFlightMode(bool enabled) {
+    flight_mode = enabled;
+    printf("WIFI set-flight-mode=%d\n", enabled);
+    return 0;
+}
+int WiFiPower(int enabled) {
+    printf("WIFI power=%d\n", enabled);
+    return 0;
+}
+int NetConnectAsync(int (*callback)(int)) {
+    puts("WIFI connect-async");
+    wifi_callback = callback;
+    return 0;
+}
 
 static void append(const char *fmt, ...) {
     va_list args;
@@ -128,11 +149,11 @@ int GetThemeInt(const char *name, int fallback) {
 int GetCaptionHeight(void) { return GetThemeInt("application.caption.height", 70); }
 
 ibitmap *GetResource(const char *name, const ibitmap *fallback) {
-    static const char *names[] = {"home", "refresh", "ci_diagnostic", "ci_search_for_updates", "info"};
-    static ibitmap *resources[5];
+    static const char *names[] = {"home", "wifi", "refresh", "ci_diagnostic", "ci_search_for_updates", "info"};
+    static ibitmap *resources[6];
     const char *missing = getenv("EC_UI_MISSING_RESOURCE");
     if (missing && !strcmp(missing, name)) return (ibitmap *)fallback;
-    for (size_t i = 0; i < 5; ++i) {
+    for (size_t i = 0; i < sizeof names / sizeof names[0]; ++i) {
         if (strcmp(name, names[i])) continue;
         if (resources[i]) return resources[i];
         const char *reference = getenv("EC_UI_THEME_REFERENCE");
@@ -164,8 +185,8 @@ ibitmap *GetResource(const char *name, const ibitmap *fallback) {
 
 void DrawBitmap(int x, int y, const ibitmap *bitmap) {
     const char *name = "unknown";
-    const char *names[] = {"home", "refresh", "ci_diagnostic", "ci_search_for_updates", "info"};
-    for (size_t i = 0; i < 5; ++i) if (GetResource(names[i], NULL) == bitmap) name = names[i];
+    const char *names[] = {"home", "wifi", "refresh", "ci_diagnostic", "ci_search_for_updates", "info"};
+    for (size_t i = 0; i < sizeof names / sizeof names[0]; ++i) if (GetResource(names[i], NULL) == bitmap) name = names[i];
     append("<g data-resource=\"%s\" data-x=\"%d\" data-y=\"%d\" data-width=\"%d\" data-height=\"%d\">",
            name, x, displayed_y(y), bitmap->width, bitmap->height);
     if (bitmap->depth != 8) abort();
@@ -391,6 +412,7 @@ void InkViewMain(iv_handler handler) {
             int screen_x, screen_y;
             if (ui_control_in_toolbar(id)) {
                 int slot = GetResource("home", NULL)->width;
+                if (GetResource("wifi", NULL)->width > slot) slot = GetResource("wifi", NULL)->width;
                 if (GetResource("refresh", NULL)->width > slot) slot = GetResource("refresh", NULL)->width;
                 if (GetResource("ci_diagnostic", NULL)->width > slot) slot = GetResource("ci_diagnostic", NULL)->width;
                 if (GetResource("ci_search_for_updates", NULL)->width > slot) slot = GetResource("ci_search_for_updates", NULL)->width;
@@ -421,6 +443,12 @@ void InkViewMain(iv_handler handler) {
             void (*callback)(int)=dialog_callback;dialog_callback=NULL;callback(atoi(command+7));
         } else if (!strcmp(command,"cancel-update") && progress_callback) {
             void (*callback)(int)=progress_callback;progress_callback=NULL;callback(0);
+        } else if (sscanf(command, "flight-mode %d", &x) == 1) {
+            flight_mode = x != 0;
+        } else if (sscanf(command, "wifi-result %d", &x) == 1 && wifi_callback) {
+            int (*callback)(int) = wifi_callback;
+            wifi_callback = NULL;
+            callback(x);
         } else if (!strcmp(command, "network")) {
             setenv("EC_UI_ADDRESS", "", 1);
         } else if (!strncmp(command, "network ", 8)) {

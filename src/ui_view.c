@@ -30,6 +30,7 @@ static void draw_text(ui_text_id area, const char *value, ifont *font) {
 bool ui_prepare_toolbar(ui_app *app) {
     ui_toolbar *bar = &app->toolbar;
     bar->home = GetResource("home", NULL);
+    bar->wifi = GetResource("wifi", NULL);
     bar->refresh = GetResource("refresh", NULL);
     bar->diagnostics = GetResource("ci_diagnostic", NULL);
     bar->updates = GetResource("ci_search_for_updates", NULL);
@@ -37,9 +38,10 @@ bool ui_prepare_toolbar(ui_app *app) {
     bar->height = GetCaptionHeight();
     bar->left_indent = GetThemeInt("application.caption.button.left.indent.horizontal", 0);
     bar->right_indent = GetThemeInt("application.caption.button.right.indent.horizontal", 0);
-    if (!bar->home || !bar->refresh || !bar->diagnostics || !bar->updates || !bar->version || bar->height <= 0 ||
+    if (!bar->home || !bar->wifi || !bar->refresh || !bar->diagnostics || !bar->updates || !bar->version || bar->height <= 0 ||
         bar->height >= app->screen_height) return false;
     bar->slot_width = bar->home->width;
+    if (bar->wifi->width > bar->slot_width) bar->slot_width = bar->wifi->width;
     if (bar->refresh->width > bar->slot_width) bar->slot_width = bar->refresh->width;
     if (bar->diagnostics->width > bar->slot_width) bar->slot_width = bar->diagnostics->width;
     if (bar->updates->width > bar->slot_width) bar->slot_width = bar->updates->width;
@@ -48,7 +50,7 @@ bool ui_prepare_toolbar(ui_app *app) {
                                             bar->left_indent, bar->right_indent);
     return bar->slot_width > 0 && bar->left_indent >= 0 && bar->right_indent >= 0 &&
            title.width > 0 &&
-           bar->home->height <= bar->height && bar->refresh->height <= bar->height &&
+           bar->home->height <= bar->height && bar->wifi->height <= bar->height && bar->refresh->height <= bar->height &&
            bar->diagnostics->height <= bar->height && bar->updates->height <= bar->height &&
            bar->version->height <= bar->height;
 }
@@ -60,7 +62,8 @@ static void draw_native_icon(const ui_app *app, ui_control_id id, const ibitmap 
     int x = bounds.x + (bounds.width - bitmap->width) / 2;
     int y = (bounds.height - bitmap->height) / 2;
     DrawBitmap(x, y, bitmap);
-    if (id == UI_REFRESH_LIBRARY && app->library_refresh)
+    if ((id == UI_REFRESH_LIBRARY && app->library_refresh) ||
+        (id == UI_CONNECT_WIFI && (app->wifi_connecting || app->network_available)))
         DimArea(x, y, bitmap->width, bitmap->height, WHITE);
 }
 
@@ -68,10 +71,11 @@ static void draw_toolbar(const ui_app *app) {
     const ui_toolbar *bar = &app->toolbar;
     ui_rect bounds = ui_toolbar_title_bounds(app->screen_width, bar->height, bar->slot_width,
                                              bar->left_indent, bar->right_indent);
-    /* Keep the native title centered while reserving space for all four actions. */
+    /* Keep the native title centered between two left and four right actions. */
     irect title = {bounds.x, bounds.y, bounds.width, bounds.height, ALIGN_CENTER | VALIGN_MIDDLE};
     DrawApplicationCaption("Easy Connect", &title);
     draw_native_icon(app, UI_EXIT, bar->home);
+    draw_native_icon(app, UI_CONNECT_WIFI, bar->wifi);
     draw_native_icon(app, UI_REFRESH_LIBRARY, bar->refresh);
     draw_native_icon(app, UI_SAVE_DIAGNOSTICS, bar->diagnostics);
     draw_native_icon(app, UI_CHECK_UPDATES, bar->updates);
@@ -81,7 +85,7 @@ static void draw_toolbar(const ui_app *app) {
 static void draw_button(const ui_app *app, ui_control_id control, const char *label, bool selected,
                         bool enabled) {
     if (control != UI_SSH_TAB && control != UI_FTP_TAB &&
-        control != UI_STOP && control != UI_EXIT && control != UI_SAVE_DIAGNOSTICS && control != UI_REFRESH_LIBRARY && control != UI_CHECK_UPDATES && control != UI_VERSION) {
+        control != UI_CONNECT_WIFI && control != UI_STOP && control != UI_EXIT && control != UI_SAVE_DIAGNOSTICS && control != UI_REFRESH_LIBRARY && control != UI_CHECK_UPDATES && control != UI_VERSION) {
         enabled = enabled && app->network_available;
     }
     ui_rect bounds = ui_control_bounds(control);
@@ -208,7 +212,7 @@ static void draw_ftp_settings(const ui_app *app) {
 static void draw_footer(const ui_app *app) {
     const char *notice = app->notices[app->active_tab];
     if (!app->network_available && !*notice) {
-        notice = "Connect to Wi-Fi in device settings. Waiting for an IP address...";
+        notice = "Tap Connect Wi-Fi. Waiting for an IP address...";
     }
     draw_text(UI_TEXT_NOTICE, *notice ? notice : "Services keep running in the background. Use Stop to end connections.",
               app->fonts.small);

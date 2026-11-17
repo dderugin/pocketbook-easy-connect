@@ -127,7 +127,7 @@ void ui_update_check(ui_app *app) {
     }
     if (!app->network_available) {
         result(ICON_WARNING,
-               "Connect to Wi-Fi in the reader settings, then check for updates again.");
+               "Tap Connect Wi-Fi, then check for updates again.");
         return;
     }
     update.lock = ec_update_lock();

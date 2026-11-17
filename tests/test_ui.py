@@ -65,8 +65,8 @@ class UITests(unittest.TestCase):
 
     def test_version_and_update_check_remain_available_offline(self):
         result = self.run_ui(['press version', 'dialog 1', 'press check-updates', 'dialog 1'], address='')
-        self.assertIn('DIALOG Version: Easy Connect 0.3.1', result.stdout)
-        self.assertIn('Connect to Wi-Fi in the reader settings', result.stdout)
+        self.assertIn('DIALOG Version: Easy Connect 0.3.2', result.stdout)
+        self.assertIn('Tap Connect Wi-Fi', result.stdout)
 
     def test_cancel_update_preserves_installation_and_clears_lock(self):
         result = self.run_ui(['press check-updates', 'cancel-update', 'press version', 'dialog 1'])
@@ -305,7 +305,7 @@ class UITests(unittest.TestCase):
                 for snapshot in snapshots:
                     elements = list(ET.parse(snapshot).getroot().iter())
                     icons = [e for e in elements if e.attrib.get('data-resource')]
-                    self.assertEqual({e.attrib['data-resource'] for e in icons}, {'home','refresh','ci_diagnostic','ci_search_for_updates','info'})
+                    self.assertEqual({e.attrib['data-resource'] for e in icons}, {'home','wifi','refresh','ci_diagnostic','ci_search_for_updates','info'})
                     caption = [e for e in elements if e.attrib.get('data-theme-font')]
                     self.assertEqual(len(caption),1)
                     self.assertEqual(caption[0].attrib['data-theme-font'],'application.caption.font')
@@ -323,13 +323,69 @@ class UITests(unittest.TestCase):
             result=self.run_ui([f'snapshot {snapshot}','press version','dialog 1',
                                 'press check-updates','dialog 1'],width=width,height=height,address='')
             self.assertIn('DIALOG Version:',result.stdout)
-            self.assertIn('Connect to Wi-Fi',result.stdout)
+            self.assertIn('Connect Wi-Fi',result.stdout)
             elements=list(ET.parse(snapshot).getroot().iter())
             icons={e.attrib['data-resource']:e for e in elements if e.attrib.get('data-resource')}
-            self.assertEqual(len(icons),5)
+            self.assertEqual(len(icons),6)
             self.assertNotIn('Check for updates',[e.text for e in elements if e.tag.endswith('text')])
             self.assertNotIn('Version',[e.text for e in elements if e.tag.endswith('text')])
             self.assertTrue(all(int(icon.attrib['data-y'])<height*.1 for icon in icons.values()))
+
+    def test_connect_wifi_disables_flight_mode_and_enables_service_controls(self):
+        for tab in ('ssh', 'ftp'):
+            with self.subTest(tab=tab):
+                text = self.root / f'wifi-{tab}.txt'
+                port = 2233 if tab == 'ssh' else 2133
+                result = self.run_ui([f'press {tab}-tab', 'flight-mode 1',
+                    'press connect-wifi', 'hide', 'press connect-wifi', 'tick',
+                    'network 192.0.2.42', 'wifi-result 0', f'text {text}',
+                    f'press {tab}-port', f'key {port}'], address='')
+                self.assertIn('WIFI flight-mode=1\nWIFI set-flight-mode=0\nWIFI power=1\nWIFI connect-async', result.stdout)
+                self.assertEqual(result.stdout.count('WIFI connect-async'), 1)
+                self.assertIn('192.0.2.42', text.read_text())
+                self.assertIn('Wi-Fi connected', text.read_text())
+                self.assertIn(f'{tab}_port={port}', (self.root / 'easy-connect.conf').read_text())
+
+    def test_wifi_failure_can_retry_and_ip_can_arrive_after_callback(self):
+        failed, waiting, connected = [self.root / f'{name}.txt' for name in ('failed','waiting','connected')]
+        result = self.run_ui(['press connect-wifi', 'wifi-result -1', f'text {failed}',
+            'press connect-wifi', 'background', 'wifi-result 0', 'foreground',
+            f'text {waiting}', 'network 192.0.2.43', 'tick', f'text {connected}'], address='')
+        self.assertNotIn('WIFI set-flight-mode=', result.stdout)
+        self.assertEqual(result.stdout.count('WIFI power=1\nWIFI connect-async'), 2)
+        self.assertIn('cancelled or failed', failed.read_text())
+        self.assertIn('Waiting for Wi-Fi and an IP address', waiting.read_text())
+        self.assertIn('192.0.2.43', connected.read_text())
+
+    def test_wifi_button_is_dimmed_and_ignored_while_connected(self):
+        import xml.etree.ElementTree as ET
+        for tab in ('ssh', 'ftp'):
+            snapshot = self.root / f'wifi-connected-{tab}.svg'
+            result = self.run_ui([f'press {tab}-tab', f'snapshot {snapshot}', 'press connect-wifi'])
+            self.assertNotIn('WIFI ', result.stdout)
+            elements = list(ET.parse(snapshot).getroot().iter())
+            icon = next(e for e in elements if e.attrib.get('data-resource') == 'wifi')
+            self.assertTrue(any(e.attrib.get('fill-opacity') == '.6' and all(
+                e.attrib.get(key) == icon.attrib.get('data-' + key)
+                for key in ('x', 'y', 'width', 'height')) for e in elements))
+
+    def test_wifi_button_rechecks_connection_before_status_tick(self):
+        result = self.run_ui(['network 192.0.2.44', 'press connect-wifi',
+                              'press ssh-port', 'key 2233'], address='')
+        self.assertNotIn('WIFI ', result.stdout)
+        self.assertIn('ssh_port=2233', (self.root / 'easy-connect.conf').read_text())
+
+    def test_wifi_button_reenables_after_connection_loss(self):
+        result = self.run_ui(['press connect-wifi', 'network', 'tick',
+                              'press connect-wifi', 'network 192.0.2.45',
+                              'wifi-result 0', 'press connect-wifi'])
+        self.assertEqual(result.stdout.count('WIFI connect-async'), 1)
+
+    def test_wifi_button_works_on_scaled_screens(self):
+        for width, height in ((600,800),(1072,1448),(1264,1680),(1404,1872),(1872,1404)):
+            result = self.run_ui(['press connect-wifi', 'wifi-result 0'],
+                                 width=width, height=height, address='')
+            self.assertIn('WIFI connect-async', result.stdout)
 
     def test_offline_controls_are_blocked_then_enable_automatically(self):
         offline, online = self.root / 'offline.txt', self.root / 'online.txt'

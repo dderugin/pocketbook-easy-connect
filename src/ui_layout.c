@@ -77,6 +77,7 @@ static const control_definition controls[UI_CONTROL_COUNT] = {
     [UI_FTP_SET_PASSWORD] = {"ftp-set-password",
                              {COLUMN_RIGHT, 688, THREE_COLUMN_WIDTH, PORT_ROW_HEIGHT},
                              SCOPE_FTP},
+    [UI_CONNECT_WIFI] = {"connect-wifi", {0}, SCOPE_COMMON},
     [UI_SAVE_DIAGNOSTICS] = {"save-diagnostics", {0}, SCOPE_COMMON},
     [UI_REFRESH_LIBRARY] = {"refresh-library", {0}, SCOPE_COMMON},
     [UI_EXIT] = {"home", {0}, SCOPE_COMMON},
@@ -110,6 +111,7 @@ ui_rect ui_toolbar_bounds(ui_control_id id, int screen_width, int caption_height
     int x;
     switch (id) {
     case UI_EXIT: x = left_indent; break;
+    case UI_CONNECT_WIFI: x = left_indent + slot_width; break;
     case UI_REFRESH_LIBRARY: x = screen_width - right_indent - 4 * slot_width; break;
     case UI_SAVE_DIAGNOSTICS: x = screen_width - right_indent - 3 * slot_width; break;
     case UI_CHECK_UPDATES: x = screen_width - right_indent - 2 * slot_width; break;
@@ -120,13 +122,13 @@ ui_rect ui_toolbar_bounds(ui_control_id id, int screen_width, int caption_height
 }
 
 bool ui_control_in_toolbar(ui_control_id id) {
-    return id >= UI_SAVE_DIAGNOSTICS && id <= UI_VERSION;
+    return id >= UI_CONNECT_WIFI && id <= UI_VERSION;
 }
 
 ui_rect ui_toolbar_title_bounds(int screen_width, int caption_height, int slot_width,
                                  int left_indent, int right_indent) {
     int reserve = right_indent + UI_TOOLBAR_RIGHT_BUTTONS * slot_width;
-    if (left_indent + slot_width > reserve) reserve = left_indent + slot_width;
+    if (left_indent + 2 * slot_width > reserve) reserve = left_indent + 2 * slot_width;
     return (ui_rect){reserve, 0, screen_width - 2 * reserve, caption_height};
 }
 

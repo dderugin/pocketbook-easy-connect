@@ -75,9 +75,9 @@ class UpdateTests(unittest.TestCase):
             self.package(entries=changed);self.run_driver('archive',expected=1)
         self.assertFalse((self.directory/'outside').exists())
     def test_package_metadata_family_version_and_api_must_match(self):
-        for kwargs in ({'family':'other'},{'models':'632 6110\n'},{'version':'0.3.2'}):
+        for kwargs in ({'family':'other'},{'models':'632 6110\n'},{'version':NEXT}):
             self.package(**kwargs)
-            if 'version' in kwargs:self.channel.write_text(self.channel.read_text().replace('0.3.2','0.3.1'))
+            if 'version' in kwargs:self.channel.write_text(self.channel.read_text().replace(NEXT,CURRENT))
             self.run_driver('archive',expected=1)
     def test_symlinks_foreign_architecture_and_crc_are_rejected(self):
         entries=[(n,b'#!/bin/sh\nexit 0\n' if n.endswith('/EasyConnect.app') else b'auth=password\n' if n.endswith('.default') else elf()) for n in NAMES]

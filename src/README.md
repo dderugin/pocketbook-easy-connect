@@ -2,7 +2,7 @@
 
 - `ui_layout.c/.h`: logical canvas, named control/text rectangles, visibility and hit testing.
   Change geometry here; drawing and touch handling read the same definitions.
-- `ui_view.c`: drawing the firmware Home/refresh/diagnostics bitmaps, native application caption, status footer and settings panels.
+- `ui_view.c`: drawing the firmware Home/Wi-Fi/refresh/diagnostics bitmaps, native application caption, status footer and settings panels.
 - `ui.c`: InkView events, editor callbacks, saved settings, notices and daemon actions.
 - `ui_library.c`: owned manual scanner supervision and a bounded final scan after app exit.
 - `ui.h`: application, editor and font state shared by the UI controller and renderer.
