@@ -6,6 +6,14 @@ int main(void) {
     assert(ec_device_supported("PocketBook 634", "U634.6.10.9999"));
     assert(ec_device_supported("PB700", "U700.6.12.1"));
     assert(ec_device_supported(" PB743g ", "U743G.6.11.9999"));
+    assert(ec_device_supported("PB743K3", "U743k3.6.10.2854"));
+    assert(ec_device_supported(" PB743k3 ", "U743k3.6.10.9999"));
+    assert(ec_device_supported("PocketBook 743K3 (PB743K3)", "U743k3.6.11.1"));
+    const ec_device_profile *color = ec_device_identify("PocketBook 743k3");
+    assert(color && !strcmp(color->model, "743K3") && !strcmp(color->name, "InkPad Color 3"));
+    assert(ec_firmware_api("U743k3.6.10.2854") == 610);
+    assert(!ec_device_supported("PB743K3", "U743k3.6.8.3671"));
+    assert(!ec_device_supported("PB743K", "U743k3.6.10.2854"));
     assert(!ec_device_supported("PB1030", "U1030.6.11.1"));
     assert(!ec_device_supported("PB743G", "U743g.6.9.1"));
     assert(!ec_device_supported(NULL, "U632.6.11.1"));

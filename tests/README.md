@@ -30,12 +30,12 @@ daemon restart. Unrelated InkView helper children must survive background,
 service and exit cleanup alongside real transfers.
 Linux CI runs all suites, including process ancestry and session cleanup tests.
 macOS skips Linux-only supervision checks. The shared ARM workflow runs the native suites, checks all five executable
-ABIs/dependency closures against four pinned firmware runtimes, and executes
+ABIs/dependency closures against the pinned firmware runtimes, and executes
 ARM core and real SSH/FTP probes under QEMU. The UI loader check reaches the
 application with the firmware libraries; it does not emulate the screen or
 reader's kernel policy.
 
-`shared-device` covers model normalization, all four model profiles, alphanumeric
+`shared-device` covers model normalization, all five model profiles, alphanumeric
 firmware prefixes, changed build numbers, API selection, old/malformed firmware
 and unknown-model rejection. UI tests cover each model plus portrait/landscape
 geometry at 1072×1448, 1264×1680 and 1404×1872.
