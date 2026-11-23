@@ -245,7 +245,7 @@ class PackageTests(unittest.TestCase):
         self.report = {'status': 'passed', 'family': profile['family'], 'version': profile['version'],
                        'profile': profile, 'source': source_metadata(self.root),
                        'binaries': {name: hashlib.sha256(path.read_bytes()).hexdigest() for name, path in self.binaries.items()},
-                       'devices': {d['model']: {'status': 'passed'} for d in profile['devices']},
+                       'devices': {d['model']: {'status': 'passed'} for d in profile['devices'] if not d.get('experimental', False)},
                        'native_tests': {'status': 'passed'}}
         (self.root / 'build/firmware-tests.json').write_text(json.dumps(self.report))
         self.zip = self.root / ('dist/easy-connect-' + profile['family'] + '-' + profile['version'] + '.zip')
@@ -351,6 +351,16 @@ class PackageTests(unittest.TestCase):
         self.package()
         with zipfile.ZipFile(self.zip) as archive:
             self.assertNotIn('stale-secret', archive.namelist())
+
+    def test_experimental_models_do_not_replace_required_qualification(self):
+        invalid = dict(self.report)
+        invalid['devices'] = dict(self.report['devices'])
+        invalid['devices'].pop('632')
+        invalid['devices']['629'] = {'status': 'passed'}
+        (self.root / 'build/firmware-tests.json').write_text(json.dumps(invalid))
+        with self.assertRaisesRegex(ValueError, 'shared-device verification'):
+            self.package()
+        self.assertFalse(self.zip.exists())
 
     def test_missing_or_stale_firmware_checks_block_package(self):
         for invalid in ({}, {**self.report, 'devices': {}}, {**self.report, 'binaries': {}},

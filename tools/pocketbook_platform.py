@@ -16,10 +16,12 @@ def load_profile(root=ROOT):
         raise ValueError('Invalid release version')
     models = set()
     for device in profile['devices']:
-        if device['model'] in models or not re.fullmatch(r'[0-9]+[A-Z0-9]*', device['model']):
+        if device['model'] in models or not re.fullmatch(r'[0-9]+[A-Z0-9]*(?:-[0-9]+)?', device['model']):
             raise ValueError('Invalid or duplicate model')
         if device['minimum_api'] not in (610, 611):
             raise ValueError('Invalid minimum API level')
+        if type(device.get('experimental', False)) is not bool:
+            raise ValueError('Invalid experimental status')
         models.add(device['model'])
     if not models:
         raise ValueError('Empty device registry')

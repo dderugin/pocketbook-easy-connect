@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Drive the real device UI callbacks through the test-only InkView surface."""
 from pathlib import Path
+import json
 import hashlib
 import os
 import subprocess
@@ -54,6 +55,16 @@ class UITests(unittest.TestCase):
             self.assertIn("SSH daemon", text.read_text())
             self.assertIn("firmware:", result.stderr)
 
+    def test_registry_models_at_native_resolution(self):
+        profile = json.loads((Path(__file__).resolve().parents[1] / 'config/pocketbook.json').read_text())
+        for device in profile['devices']:
+            for width, height in ((device['width'], device['height']), (device['height'], device['width'])):
+                with self.subTest(model=device['model'], width=width, height=height):
+                    text = self.root / 'registry.txt'
+                    self.run_ui([f'text {text}'], model='PB' + device['model'],
+                                firmware='U' + device['model'] + '.6.10.9999', width=width, height=height)
+                    self.assertIn('SSH daemon', text.read_text())
+
     def test_unknown_models_and_old_or_invalid_firmware_do_not_start_ui(self):
         for model, firmware in (("PB1030", "U1030.6.11.1"), ("PB743g", "U743g.6.9.1"),
                                 ("PB743K3", "U743k3.6.8.3671"), ("PB632", "invalid")):
@@ -65,7 +76,7 @@ class UITests(unittest.TestCase):
 
     def test_version_and_update_check_remain_available_offline(self):
         result = self.run_ui(['press version', 'dialog 1', 'press check-updates', 'dialog 1'], address='')
-        self.assertIn('DIALOG Version: Easy Connect 0.3.2', result.stdout)
+        self.assertIn('DIALOG Version: Easy Connect 0.3.3', result.stdout)
         self.assertIn('Tap Connect Wi-Fi', result.stdout)
 
     def test_cancel_update_preserves_installation_and_clears_lock(self):

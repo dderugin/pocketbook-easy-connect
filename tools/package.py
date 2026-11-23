@@ -76,6 +76,7 @@ def main():
                 'target':profile['family'], 'compatibility':profile,
                 'automated_validation':verification,
                 'device_validation':'not-performed',
+                'experimental_models':[d['model'] for d in profile['devices'] if d.get('experimental', False)],
                 'sdk':json.loads((ROOT / 'sdk.json').read_text()),
                 'binaries':{name:hashlib.sha256(path.read_bytes()).hexdigest() for name,path in binaries.items()},
                 'dependencies':json.loads((ROOT / 'dependencies.json').read_text())}

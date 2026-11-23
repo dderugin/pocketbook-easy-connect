@@ -51,11 +51,146 @@
       "skin": "pb631fw5",
       "firmware": "U743k3.6.10.2854",
       "minimum_api": 610
+    },
+    {
+      "model": "618",
+      "name": "Basic Lux 4",
+      "dpi": 212,
+      "width": 758,
+      "height": 1024,
+      "minimum_api": 610,
+      "experimental": true
+    },
+    {
+      "model": "619",
+      "name": "Verse Lite",
+      "dpi": 212,
+      "width": 758,
+      "height": 1024,
+      "minimum_api": 610,
+      "experimental": true
+    },
+    {
+      "model": "628",
+      "name": "Touch Lux 5",
+      "dpi": 212,
+      "width": 758,
+      "height": 1024,
+      "minimum_api": 610,
+      "experimental": true
+    },
+    {
+      "model": "629",
+      "name": "Verse",
+      "dpi": 212,
+      "width": 758,
+      "height": 1024,
+      "minimum_api": 610,
+      "experimental": true
+    },
+    {
+      "model": "633",
+      "name": "Color",
+      "dpi": 300,
+      "width": 1072,
+      "height": 1448,
+      "minimum_api": 610,
+      "experimental": true
+    },
+    {
+      "model": "634K3",
+      "name": "Verse Pro Color",
+      "dpi": 300,
+      "width": 1072,
+      "height": 1448,
+      "minimum_api": 610,
+      "experimental": true
+    },
+    {
+      "model": "700K3",
+      "name": "Era Color",
+      "dpi": 300,
+      "width": 1264,
+      "height": 1680,
+      "minimum_api": 610,
+      "experimental": true
+    },
+    {
+      "model": "710",
+      "name": "Era Lite",
+      "dpi": 300,
+      "width": 1264,
+      "height": 1680,
+      "minimum_api": 610,
+      "experimental": true
+    },
+    {
+      "model": "740",
+      "name": "InkPad 3",
+      "dpi": 300,
+      "width": 1404,
+      "height": 1872,
+      "minimum_api": 610,
+      "experimental": true
+    },
+    {
+      "model": "740-2",
+      "name": "InkPad 3 Pro",
+      "dpi": 300,
+      "width": 1404,
+      "height": 1872,
+      "minimum_api": 610,
+      "experimental": true
+    },
+    {
+      "model": "740-3",
+      "name": "InkPad 3 Pro",
+      "dpi": 300,
+      "width": 1404,
+      "height": 1872,
+      "minimum_api": 610,
+      "experimental": true
+    },
+    {
+      "model": "741",
+      "name": "InkPad Color",
+      "dpi": 300,
+      "width": 1404,
+      "height": 1872,
+      "minimum_api": 610,
+      "experimental": true
+    },
+    {
+      "model": "743C",
+      "name": "InkPad Color 2",
+      "dpi": 300,
+      "width": 1404,
+      "height": 1872,
+      "minimum_api": 610,
+      "experimental": true
+    },
+    {
+      "model": "970",
+      "name": "InkPad Lite",
+      "dpi": 150,
+      "width": 825,
+      "height": 1200,
+      "minimum_api": 610,
+      "experimental": true
+    },
+    {
+      "model": "1040",
+      "name": "InkPad X",
+      "dpi": 227,
+      "width": 1404,
+      "height": 1872,
+      "minimum_api": 610,
+      "experimental": true
     }
   ],
   "firmware_policy": "known-model-compatible-api",
   "application": "Easy Connect",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "cpu_flags": [
     "-mcpu=generic-armv7-a",
     "-march=armv7-a",

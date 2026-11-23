@@ -56,7 +56,7 @@ int ec_update_parse(const char *text, const char *model, const char *firmware,
     bool compatible = false;
     for (size_t i = 4; i < n; i += 2) {
         if (!*words[i] || strlen(words[i]) > 16 ||
-            strspn(words[i], "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ") != strlen(words[i]) ||
+            strspn(words[i], "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-") != strlen(words[i]) ||
             !*words[i + 1] || strlen(words[i + 1]) > 4 ||
             strspn(words[i + 1], "0123456789") != strlen(words[i + 1]))
             return ec_error("Invalid update compatibility rule.");

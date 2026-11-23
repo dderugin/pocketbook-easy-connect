@@ -140,6 +140,7 @@ def main():
                            'preserve_argv0': qemu['preserve_argv0']},
               'binaries': hashes(paths), 'native_tests': native, 'devices': {},
               'device_validation': 'not-performed',
+              'experimental_models': [d['model'] for d in profile['devices'] if d.get('experimental', False)],
               'limits': ['QEMU probes do not verify physical UI, scanner, Wi-Fi, suspend or USB behavior',
                          'SSH/FTP probes use a native controller harness; background and update probes use ARM controllers on loopback; update UI callbacks use the native test adapter']}
     for name, path in paths.items():

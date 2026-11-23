@@ -10,7 +10,8 @@ CURRENT=json.loads((PROJECT/'config/pocketbook.json').read_text())['version']
 _version=[int(p) for p in CURRENT.split('.')];_version[-1]+=1
 NEXT='.'.join(map(str,_version))
 FAMILY='pocketbook-armv7-softfp'
-MODELS='632 610\n634 610\n700 610\n743G 610\n743K3 610\n'
+PROFILE=json.loads((Path(__file__).resolve().parents[1] / 'config/pocketbook.json').read_text())
+MODELS=''.join(d['model'] + ' ' + str(d['minimum_api']) + '\n' for d in PROFILE['devices'])
 NAMES=['applications/EasyConnect.app','system/share/easy-connect/easy-connect.conf.default']+['system/share/easy-connect/bin/'+n for n in ('easy-connect','easy-connect.app','dropbear','dropbearkey','vsftpd')]
 def elf():
     data=bytearray(128);data[:7]=b'\x7fELF\x01\x01\x01';struct.pack_into('<HH',data,16,2,40);struct.pack_into('<I',data,36,0x5000200);return bytes(data)
@@ -47,6 +48,12 @@ class UpdateTests(unittest.TestCase):
     def test_semver_numeric_and_invalid_versions(self):
         for a,b,expected in [('0.3.10','0.3.2',0),('1.0.0','0.99.99',0),('0.3.0','0.3.0',1),('0.2.9','0.3.0',1),('01.0.0','0.3.0',1),('1.2','0.3.0',1),('1.2.3.4','0.3.0',1),('1.2.3-beta','0.3.0',1),('9999999.0.0','0.3.0',1)]:
             self.assertEqual(subprocess.run([str(BINARY),'newer',a,b]).returncode,expected,(a,b))
+    def test_all_registry_models_accept_updates(self):
+        for device in PROFILE['devices']:
+            with self.subTest(model=device['model']):
+                self.run_driver('parse', model='PB' + device['model'],
+                                firmware='U' + device['model'] + '.6.10.9999')
+
     def test_compatible_models_and_newer_firmware_patches(self):
         for model,firmware in [('PB632','U632.6.11.9999'),('PocketBook 634','U634.6.10.9999'),('PB700','U700.6.12.1'),('PB743g','U743g.6.11.9999'),('PB743K3','U743k3.6.10.2854'),('PocketBook 743k3','U743k3.6.10.9999')]:self.run_driver('parse',model=model,firmware=firmware)
         self.run_driver('parse',model='PB1030',expected=1);self.run_driver('parse',firmware='U632.6.9.1',expected=1)

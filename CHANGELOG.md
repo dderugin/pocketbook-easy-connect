@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.3 — 2026-11-23
+
+- Expand the ARMv7 softfp model registry from 5 to 20 model IDs.
+- Add Verse, Verse Lite, Verse Pro Color, Era Lite, Era Color, Basic Lux 4,
+  Touch Lux 5, Color, InkPad 3/3 Pro, InkPad Color/Color 2, InkPad Lite and InkPad X.
+- Accept hyphenated InkPad 3 Pro model IDs in update compatibility metadata.
+- Check startup in both orientations at every registered model resolution and
+  verify update admission for every model.
+- Retain the firmware API 6.10 minimum and exclude Android and hard-float models.
+
+New model entries remain experimental pending firmware and physical qualification.
+
 ## 0.3.2 — 2026-11-17
 
 - Add a native Wi-Fi button beside Home in the toolbar of both tabs, available offline.

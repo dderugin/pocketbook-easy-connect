@@ -43,12 +43,14 @@ ARM core and real SSH/FTP probes under QEMU. The UI loader check reaches the
 application with the firmware libraries; it does not emulate the screen or
 reader's kernel policy.
 
-`shared-device` covers model normalization, all five model profiles, alphanumeric
+`shared-device` covers model normalization, all 20 model profiles, alphanumeric
 firmware prefixes, changed build numbers, API selection, old/malformed firmware
-and unknown-model rejection. UI tests cover each model plus portrait/landscape
+and unknown-model rejection. UI tests cover every registered model at its native portrait/landscape resolution, plus
 geometry at 1072×1448, 1264×1680 and 1404×1872.
 
-Release admission rejects missing, stale, incomplete or failed firmware reports.
+Release admission rejects missing, stale, incomplete or failed firmware reports
+for the non-experimental models. Experimental registry entries are identified
+separately and cannot replace required firmware qualification.
 Packaging fixtures remain synthetic; they test policy, not ARM execution.
 Physical InkView rendering, scanner behavior, Wi-Fi/suspend/USB transitions and
 actual firmware account privileges still require a reader. Native theme metadata

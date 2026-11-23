@@ -32,11 +32,27 @@ FTP is unencrypted. **SFTP, SCP and FTPS are not included.** See the guide's
 
 ## Supported readers
 
-One shared **ARMv7 Linux softfp** package targets Touch HD 3, Verse Pro, Era,
-InkPad 4 and InkPad Color 3. The same application and service executables are used on every qualified
-model. Other models and firmware families require qualification.
+One shared **ARMv7 Linux softfp** package recognizes 20 model IDs. In addition
+to the qualification snapshots below, the registry includes Basic Lux 4 (618),
+Verse Lite (619), Touch Lux 5 (628), Verse (629), Color (633), Verse Pro Color
+(634K3), Era Color (700K3), Era Lite (710), InkPad 3 (740), InkPad 3 Pro
+(740-2/740-3), InkPad Color (741), InkPad Color 2 (743C), InkPad Lite (970)
+and InkPad X (1040).
 
-The shared package version is **0.3.2**. Known models use API-based firmware
+Recognition enables startup and update compatibility checks; it does **not**
+prove runtime compatibility. Added models still require pinned firmware library
+checks and physical acceptance. Release packaging requires a passing firmware report for each of the five
+non-experimental models. The other 15 model IDs are explicitly marked experimental
+in the package metadata and still require qualification. No firmware versions or qualification results are
+invented for the added models.
+
+InkPad One (1030) needs a separate hard-float build. Android models, including
+InkPad Eo, Color Note and InkPad X Pro, need a separate Android implementation.
+Model IDs and platform distinctions were checked against the
+[KOReader PocketBook device registry](https://github.com/koreader/koreader/blob/master/frontend/device/pocketbook/device.lua);
+current products are listed in the [PocketBook catalog](https://products.pocketbook.ch/).
+
+The shared package version is **0.3.3**. Known models use API-based firmware
 admission, matching the shared CoolReader policy: firmware patch/build numbers
 are not an exact-version whitelist. The latest known API level at or below the
 installed firmware is selected (6.10/6.11); unknown models and API levels below
@@ -223,8 +239,8 @@ the launcher applies the firmware executable-stack compatibility setting.
 
 Outputs:
 
-- `dist/easy-connect-pocketbook-armv7-softfp-0.3.2.zip`
-- `dist/easy-connect-pocketbook-armv7-softfp-0.3.2-sources.zip`
+- `dist/easy-connect-pocketbook-armv7-softfp-0.3.3.zip`
+- `dist/easy-connect-pocketbook-armv7-softfp-0.3.3-sources.zip`
 - Their `.sha256` files.
 
 The install ZIP still contains only seven runtime files: the launcher, five

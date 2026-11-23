@@ -13,7 +13,7 @@ def hashes(paths):
 
 def verified_report(path, root, profile, paths):
     report = json.loads(path.read_text())
-    expected = {d['model'] for d in profile['devices']}
+    expected = {d['model'] for d in profile['devices'] if not d.get('experimental', False)}
     if (report.get('status') != 'passed' or report.get('family') != profile['family'] or
         report.get('version') != profile['version'] or report.get('source') != source_metadata(root) or
         report.get('binaries') != hashes(paths) or report.get('profile') != profile or
