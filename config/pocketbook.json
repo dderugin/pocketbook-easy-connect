@@ -140,7 +140,8 @@
       "width": 1404,
       "height": 1872,
       "minimum_api": 610,
-      "experimental": true
+      "experimental": true,
+      "ota": false
     },
     {
       "model": "740-3",
@@ -149,7 +150,8 @@
       "width": 1404,
       "height": 1872,
       "minimum_api": 610,
-      "experimental": true
+      "experimental": true,
+      "ota": false
     },
     {
       "model": "741",

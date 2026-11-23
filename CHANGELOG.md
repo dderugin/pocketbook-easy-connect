@@ -8,6 +8,8 @@
 - Accept hyphenated InkPad 3 Pro model IDs in update compatibility metadata.
 - Check startup in both orientations at every registered model resolution and
   verify update admission for every model.
+- Preserve update compatibility with 0.3.2 by omitting hyphenated models from
+  this release’s OTA rules; install InkPad 3 Pro over USB.
 - Retain the firmware API 6.10 minimum and exclude Android and hard-float models.
 
 New model entries remain experimental pending firmware and physical qualification.

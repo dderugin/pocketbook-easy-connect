@@ -262,6 +262,10 @@ class PackageTests(unittest.TestCase):
         with zipfile.ZipFile(self.zip) as archive:
             self.assertEqual(set(archive.namelist()), expected)
             self.assertTrue(archive.comment.startswith(b'EC-PACKAGE-1\npocketbook-armv7-softfp\n'))
+            # Version 0.3.2 rejects hyphens anywhere in its model rules.
+            for rule in archive.comment.decode().splitlines()[3:]:
+                self.assertNotIn('-', rule)
+            self.assertIn('740 610', archive.comment.decode())
             self.assertIn(b'auth=password', archive.read(prefix + 'easy-connect.conf.default'))
             for path in expected - {prefix + 'easy-connect.conf.default'}:
                 self.assertEqual((archive.getinfo(path).external_attr >> 16) & 0o777, 0o755)

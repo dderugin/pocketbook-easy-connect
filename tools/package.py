@@ -93,7 +93,7 @@ def main():
         for path in sorted(runtime):
             archive.write(path, path.relative_to(stage))
         archive.comment = ('EC-PACKAGE-1\n' + profile['family'] + '\n' + profile['version'] + '\n' +
-            ''.join(d['model'] + ' ' + str(d['minimum_api']) + '\n' for d in profile['devices'])).encode()
+            ''.join(d['model'] + ' ' + str(d['minimum_api']) + '\n' for d in profile['devices'] if d.get('ota', True))).encode()
     # Keep corresponding source, notices and build evidence off the reader.
     with zipfile.ZipFile(companion, 'w', zipfile.ZIP_DEFLATED) as archive:
         for path in sorted(share.rglob('*')):

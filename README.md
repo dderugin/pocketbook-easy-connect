@@ -48,6 +48,10 @@ invented for the added models.
 
 InkPad One (1030) needs a separate hard-float build. Android models, including
 InkPad Eo, Color Note and InkPad X Pro, need a separate Android implementation.
+InkPad 3 Pro (740-2/740-3) requires USB installation for this release. Its model
+IDs are omitted from the package update rules so version 0.3.2 updaters can read
+the package; model recognition and normal operation are unaffected.
+
 Model IDs and platform distinctions were checked against the
 [KOReader PocketBook device registry](https://github.com/koreader/koreader/blob/master/frontend/device/pocketbook/device.lua);
 current products are listed in the [PocketBook catalog](https://products.pocketbook.ch/).
