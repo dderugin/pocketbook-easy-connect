@@ -32,12 +32,8 @@ FTP is unencrypted. **SFTP, SCP and FTPS are not included.** See the guide's
 
 ## Supported readers
 
-One shared **ARMv7 Linux softfp** package recognizes 20 model IDs. In addition
-to the qualification snapshots below, the registry includes Basic Lux 4 (618),
-Verse Lite (619), Touch Lux 5 (628), Verse (629), Color (633), Verse Pro Color
-(634K3), Era Color (700K3), Era Lite (710), InkPad 3 (740), InkPad 3 Pro
-(740-2/740-3), InkPad Color (741), InkPad Color 2 (743C), InkPad Lite (970)
-and InkPad X (1040).
+One shared **ARMv7 Linux softfp** package recognizes the 20 model IDs listed
+below. Experimental entries still need firmware and physical-device qualification.
 
 Recognition enables startup and update compatibility checks; it does **not**
 prove runtime compatibility. Added models still require pinned firmware library
@@ -62,21 +58,35 @@ are not an exact-version whitelist. The latest known API level at or below the
 installed firmware is selected (6.10/6.11); unknown models and API levels below
 6.10 are rejected. Compatible softfp system libraries remain necessary.
 
-| Model | Firmware snapshot for qualification | Portrait size |
-| --- | --- | --- |
-| Touch HD 3 / PB632 | U632.6.11.2001 | 1072 × 1448 |
-| Verse Pro / PB634 | U634.6.10.3425 | 1072 × 1448 |
-| Era / PB700 | U700.6.10.3209 | 1264 × 1680 |
-| InkPad 4 / PB743G | U743g.6.11.1683 | 1404 × 1872 |
-| InkPad Color 3 / PB743K3 | U743k3.6.10.2854 | 1404 × 1872 |
+| Model | Status | Firmware snapshot for qualification | Portrait size |
+| --- | --- | --- | --- |
+| Basic Lux 4 / PB618 | Experimental | Not yet qualified (API 6.10+ required) | 758 × 1024 |
+| Verse Lite / PB619 | Experimental | Not yet qualified (API 6.10+ required) | 758 × 1024 |
+| Touch Lux 5 / PB628 | Experimental | Not yet qualified (API 6.10+ required) | 758 × 1024 |
+| Verse / PB629 | Experimental | Not yet qualified (API 6.10+ required) | 758 × 1024 |
+| Touch HD 3 / PB632 | Firmware checks passed | U632.6.11.2001 | 1072 × 1448 |
+| Color / PB633 | Experimental | Not yet qualified (API 6.10+ required) | 1072 × 1448 |
+| Verse Pro / PB634 | Firmware checks passed | U634.6.10.3425 | 1072 × 1448 |
+| Verse Pro Color / PB634K3 | Experimental | Not yet qualified (API 6.10+ required) | 1072 × 1448 |
+| Era / PB700 | Firmware checks passed | U700.6.10.3209 | 1264 × 1680 |
+| Era Color / PB700K3 | Experimental | Not yet qualified (API 6.10+ required) | 1264 × 1680 |
+| Era Lite / PB710 | Experimental | Not yet qualified (API 6.10+ required) | 1264 × 1680 |
+| InkPad 3 / PB740 | Experimental | Not yet qualified (API 6.10+ required) | 1404 × 1872 |
+| InkPad 3 Pro / PB740-2 | Experimental | Not yet qualified (API 6.10+ required) | 1404 × 1872 |
+| InkPad 3 Pro / PB740-3 | Experimental | Not yet qualified (API 6.10+ required) | 1404 × 1872 |
+| InkPad Color / PB741 | Experimental | Not yet qualified (API 6.10+ required) | 1404 × 1872 |
+| InkPad Color 3 / PB743K3 | Firmware checks passed | U743k3.6.10.2854 | 1404 × 1872 |
+| InkPad Lite / PB970 | Experimental | Not yet qualified (API 6.10+ required) | 825 × 1200 |
+| InkPad X / PB1040 | Experimental | Not yet qualified (API 6.10+ required) | 1404 × 1872 |
+| InkPad Color 2 / PB743C | Experimental | Not yet qualified (API 6.10+ required) | 1404 × 1872 |
+| InkPad 4 / PB743G | Firmware checks passed | U743g.6.11.1683 | 1404 × 1872 |
 
-These snapshots define the software checks, not a list of every compatible
-firmware build. InkPad Color 3 runtime qualification and physical acceptance remain pending.
-Physical acceptance of this shared release, scanner behavior,
-Wi-Fi, suspend, USB and PTY availability still require testing on each reader.
-Earlier PB632 builds have limited physical SSH/FTP evidence, not validation of
-this new binary. Android and hard-float PocketBook variants require separate
-build families.
+Firmware snapshots record the software checks performed for the five qualified
+profiles; compatible patch/build updates are also admitted. Experimental entries
+have startup and update-admission coverage, but no qualified firmware snapshot.
+Physical acceptance of this release, including scanner behavior, Wi-Fi, suspend,
+USB and PTY availability, remains pending on every reader. Earlier PB632 builds
+have limited physical SSH/FTP evidence, which does not validate this binary.
 
 ## Wi-Fi updates
 
